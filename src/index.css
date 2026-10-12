@@ -1,0 +1,35 @@
+@import "tailwindcss";
+
+@theme {
+  --color-navy: #0B2A5B;
+  --color-navy-800: #0f3570;
+  --color-accent: #1E6BFF;
+  --color-action: #0A66FF;
+  --color-action-dark: #0852d1;
+  --color-page: #EEF2F8;
+  --color-line: #DCE3EE;
+  --color-ink: #13233F;
+  --color-muted: #5F6F89;
+  --color-ok: #16A34A;
+  --color-bad: #DC2626;
+  --color-miss: #D97706;
+  --font-sans: "Inter Variable", Inter, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+
+html,
+body {
+  background: var(--color-page);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+.tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Тонкая полоса прокрутки в панели */
+.thin-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: #c4cddc transparent;
+}
