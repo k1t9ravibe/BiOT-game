@@ -18,7 +18,7 @@ import { ListCard } from './Cards'
 
 interface Props {
   task: Task
-  img: SceneImage | null
+  img: SceneImage | null | undefined
   selected: string[]
   onToggle: (id: string) => void
   onMove: (fromId: string, toId: string) => void
@@ -67,7 +67,7 @@ export function ListCards({ task, img, selected, onToggle, onMove }: Props) {
   )
 }
 
-function SortableCard({ item, img, n, onToggle }: { item: TaskItem; img: SceneImage | null; n: number; onToggle: () => void }) {
+function SortableCard({ item, img, n, onToggle }: { item: TaskItem; img: SceneImage | null | undefined; n: number; onToggle: () => void }) {
   const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, transition, isDragging } = useSortable({ id: item.id })
   return (
     <div

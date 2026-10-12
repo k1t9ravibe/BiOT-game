@@ -14,7 +14,7 @@ const styles: Record<ItemStatus, { box: string; label: string; icon: React.React
 /** Разбор задания: статус каждой карточки, ваша и верная позиция, пояснение со ссылкой на правила */
 export function ReviewList({ task, img, result, hoveredId, onHover }: {
   task: Task
-  img: SceneImage | null
+  img: SceneImage | null | undefined
   result: TaskResult
   hoveredId: string | null
   onHover: (id: string | null) => void

@@ -5,8 +5,10 @@ import type { SceneImage } from '../hooks/useSceneImage'
 import type { Area } from '../types'
 
 /** Миниатюра — фрагмент картинки сцены, вырезанный через background-position (отдельные файлы не нужны) */
-export function Thumb({ img, area, className = '' }: { img: SceneImage | null; area: Area; className?: string }) {
+/** img === undefined — миниатюра не нужна (режим ходьбы), ничего не рисуем */
+export function Thumb({ img, area, className = '' }: { img: SceneImage | null | undefined; area: Area; className?: string }) {
   const [ref, box] = useElementSize<HTMLDivElement>()
+  if (img === undefined) return null
   const style =
     img && box.w > 0 && box.h > 0
       ? { backgroundImage: `url("${img.src}")`, backgroundRepeat: 'no-repeat', ...cropStyle(box, img, area, config.thumbPadding) }

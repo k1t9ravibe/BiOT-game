@@ -18,7 +18,7 @@ export function NumberBadge({ n, className = '' }: { n: number | null; className
 
 interface CardProps {
   item: TaskItem
-  img: SceneImage | null
+  img: SceneImage | null | undefined
   n: number | null
   onToggle: () => void
 }
