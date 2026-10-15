@@ -17,7 +17,8 @@ import type { Task, TaskResult } from '../types'
 /** Задание и маршрут для каждой сцены. Задания режима ходьбы лежат отдельно (walk-tasks.json),
  *  чтобы не попасть в основной тренажёр с картинками */
 const SCENES: Record<string, { tasksUrl: string; taskId: string; title: string; route: string }> = {
-  landscape: { tasksUrl: '/walk-tasks.json', taskId: 'landscape', title: 'Улица у КТПН', route: 'Пройдите по улице от точки A мимо КТПН до фургона (B).' },
+  // Сцена 1 — сельская улица с КТПН (готова 15.10.2026)
+  landscape: { tasksUrl: '/walk-tasks.json', taskId: 'landscape', title: 'Сцена 1. Улица у КТПН', route: 'Пройдите по улице от точки A мимо КТПН до фургона (B).' },
   t1: { tasksUrl: config.tasksUrl, taskId: 't1', title: 'Опора у сельской АТС', route: 'Дойдите от фургона (A) до опоры (B).' },
 }
 /** По умолчанию ландшафт; другую сцену можно выбрать параметром: /walk?scene=t1 → /models/t1.glb */
