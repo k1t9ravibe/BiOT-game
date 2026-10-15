@@ -14,7 +14,9 @@ import type { Task, TaskResult } from '../types'
  */
 
 const TASK_ID = 't1'
-const SCENE_URL = '/models/t1.glb'
+/** По умолчанию ландшафт; другую сцену можно выбрать параметром: /walk?scene=t1 → /models/t1.glb */
+const SCENE_NAME = new URLSearchParams(location.search).get('scene')?.replace(/[^\w-]/g, '') || 'landscape'
+const SCENE_URL = `/models/${SCENE_NAME}.glb`
 const WORKER_URL = '/models/worker.glb'
 /** На каком расстоянии от B можно завершить осмотр */
 const GOAL_RADIUS = 2
