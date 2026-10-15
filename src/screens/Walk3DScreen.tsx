@@ -14,11 +14,11 @@ import type { Task, TaskResult } from '../types'
  * Объекты сцены с именем item_<id> соответствуют карточкам задания с тем же id.
  */
 
-/** Задание и маршрут для каждой сцены. Задания режима ходьбы лежат отдельно (walk-tasks.json),
- *  чтобы не попасть в основной тренажёр с картинками */
-const SCENES: Record<string, { tasksUrl: string; taskId: string; title: string; route: string }> = {
+/** Задание и маршрут для каждой сцены; number — номер в заголовке окна «Ситуация N». Задания режима ходьбы лежат
+ *  отдельно (walk-tasks.json), чтобы не попасть в основной тренажёр с картинками */
+const SCENES: Record<string, { tasksUrl: string; taskId: string; title: string; route: string; number?: number }> = {
   // Сцена 1 — сельская улица с КТПН (готова 15.10.2026)
-  landscape: { tasksUrl: '/walk-tasks.json', taskId: 'landscape', title: 'Улица у КТПН', route: 'Пройдите по улице от точки A мимо КТПН до фургона (B).' },
+  landscape: { number: 1, tasksUrl: '/walk-tasks.json', taskId: 'landscape', title: 'Улица у КТПН', route: 'Пройдите по улице от точки A мимо КТПН до фургона (B).' },
   t1: { tasksUrl: config.tasksUrl, taskId: 't1', title: 'Опора у сельской АТС', route: 'Дойдите от фургона (A) до опоры (B).' },
 }
 /** По умолчанию ландшафт; другую сцену можно выбрать параметром: /walk?scene=t1 → /models/t1.glb */
@@ -132,7 +132,7 @@ export default function Walk3DScreen() {
           <div className="absolute inset-0 z-20 flex items-center justify-center bg-navy/60 p-3">
             <div className="flex max-h-full w-full max-w-lg flex-col rounded-2xl bg-white shadow-2xl">
               <div className="px-5 pb-2 pt-5">
-                <h2 className="text-lg font-bold text-navy">{task.title}</h2>
+                <h2 className="text-lg font-bold text-navy">Ситуация{SCENE.number ? ` ${SCENE.number}` : ''}</h2>
               </div>
               <div className="thin-scroll min-h-0 flex-1 space-y-3 overflow-y-auto px-5 pb-4 text-[15px] leading-relaxed text-ink">
                 {task.briefing.split(/\n\s*\n/).map((p, i) => (
