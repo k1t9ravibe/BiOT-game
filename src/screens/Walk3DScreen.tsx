@@ -132,7 +132,6 @@ export default function Walk3DScreen() {
           <div className="absolute inset-0 z-20 flex items-center justify-center bg-navy/60 p-3">
             <div className="flex max-h-full w-full max-w-lg flex-col rounded-2xl bg-white shadow-2xl">
               <div className="px-5 pb-2 pt-5">
-                <div className="text-xs font-semibold uppercase tracking-wide text-accent">Ситуация</div>
                 <h2 className="text-lg font-bold text-navy">{task.title}</h2>
               </div>
               <div className="thin-scroll min-h-0 flex-1 space-y-3 overflow-y-auto px-5 pb-4 text-[15px] leading-relaxed text-ink">
