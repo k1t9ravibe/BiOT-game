@@ -1,6 +1,6 @@
 """
 Сельский ландшафт для режима ходьбы: рельеф, грунтовая дорога, трава, дом с двором, заборы, лестница, деревья.
-Фургон берётся готовым из blender/assets/kazakhtelecom_white_van.glb.
+Фургон берётся готовым из blender/assets/kazakhtelecom_rounded_van.glb.
 АТС и людей сюда не ставим: их добавляют вручную в Blender, места помечены пустышками place_*.
 
 Запуск (из корня проекта):
@@ -28,7 +28,7 @@ from mathutils import noise
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 OUT_GLB = os.path.join(ROOT, "public", "models", "landscape.glb")
 OUT_BLEND = os.path.join(ROOT, "blender", "landscape_base.blend")
-VAN_GLB = os.path.join(ROOT, "blender", "assets", "kazakhtelecom_white_van.glb")
+VAN_GLB = os.path.join(ROOT, "blender", "assets", "kazakhtelecom_rounded_van.glb")
 
 random.seed(7)
 rad = math.radians
@@ -709,7 +709,7 @@ def build_far_houses():
 # ---------- Готовая модель фургона ----------
 
 def place_van():
-    """Ставит blender/assets/kazakhtelecom_white_van.glb на обочину вместо пустышки place_car.
+    """Ставит blender/assets/kazakhtelecom_rounded_van.glb на обочину вместо пустышки place_car.
     Файл сохранён с осью Z вверх (а glTF ждёт Y) и колёсами на 0,36 м над землёй — поправляем поворотом и сдвигом"""
     before = set(bpy.data.objects)
     bpy.ops.import_scene.gltf(filepath=VAN_GLB)
