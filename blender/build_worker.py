@@ -1,5 +1,5 @@
 """
-Персонаж игрока из готовой модели blender/assets/kazakhtelecom_worker_lowpoly.glb.
+Персонаж игрока из готовой модели blender/assets/kazakhtelecom_worker_rounded_realistic.glb.
 
 Запуск (из корня проекта):
     "C:\\Program Files\\Blender Foundation\\Blender 4.5\\blender.exe" --background --python blender/build_worker.py
@@ -21,7 +21,7 @@ from mathutils import Matrix
 from mathutils import Vector as V
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-SRC = os.path.join(ROOT, "blender", "assets", "kazakhtelecom_worker_lowpoly.glb")
+SRC = os.path.join(ROOT, "blender", "assets", "kazakhtelecom_worker_rounded_realistic.glb")
 OUT = os.path.join(ROOT, "public", "models", "worker.glb")
 
 HEIGHT = 1.9  # рост от подошвы до верха каски, м
@@ -79,6 +79,10 @@ def build():
         o.data.transform(fit)
         if "logo" in o.name.lower() and o.data.uv_layers:
             unmirror_decal(o)
+        # Гладкое затенение с острыми рёбрами по углу: и выглядит мягче, и экспорт не дробит каждую грань
+        # на свои вершины (иначе файл раздувается в разы)
+        o.data.polygons.foreach_set("use_smooth", [True] * len(o.data.polygons))
+        o.data.set_sharp_from_angle(angle=math.radians(40))
     bpy.context.view_layer.update()
 
     root = bpy.data.objects.new("worker", None)
