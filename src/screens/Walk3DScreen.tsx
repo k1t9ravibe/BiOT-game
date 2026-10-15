@@ -51,17 +51,38 @@ export default function Walk3DScreen() {
   const toggle = useCallback((id: string) => setMarked((m) => (m.includes(id) ? m.filter((x) => x !== id) : [...m, id])), [])
   const nearRef = useRef(near)
   nearRef.current = near
+  const markedRef = useRef(marked)
+  markedRef.current = marked
+  const resultRef = useRef(result)
+  resultRef.current = result
+  /** Карточка, которую отметит E: первая неотмеченная рядом. У одного объекта бывает несколько карточек */
+  const nextId = near.find((id) => !marked.includes(id))
 
   useEffect(() => {
     const engine = new WalkEngine(mountRef.current!, SCENE_URL, WORKER_URL, {
       onNear: setNear,
       onDistB: setDistB,
-      onInspectKey: () => nearRef.current[0] && toggle(nearRef.current[0]),
+      onInspectKey: () => {
+        const id = nearRef.current.find((x) => !markedRef.current.includes(x))
+        if (id) toggle(id)
+      },
       onReady: () => setStatus('ready'),
       onError: (m) => setStatus(m),
     })
     engineRef.current = engine
     return () => engine.dispose()
+  }, [toggle])
+
+  // Цифры 1–9 отмечают или снимают карточку с этим номером в списке «рядом»
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (resultRef.current || e.repeat || (e.target as HTMLElement).closest('input, textarea, select')) return
+      const m = /^(?:Digit|Numpad)([1-9])$/.exec(e.code)
+      const id = m && nearRef.current[Number(m[1]) - 1]
+      if (id) toggle(id)
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
   }, [toggle])
 
   useEffect(() => engineRef.current?.setMarked(marked), [marked])
@@ -103,7 +124,7 @@ export default function Walk3DScreen() {
             <b className="mb-1 block">{task?.title ?? SCENE.title}</b>
             {SCENE.route} По пути подходите к объектам и отмечайте нарушения — в порядке от наиболее критичного.
             <span className="mt-2 block text-white/75">
-              {touch ? 'Джойстик — ходьба, проведите по сцене — поворот камеры.' : 'WASD / стрелки — ходьба, Shift — бег, мышь — поворот камеры, колесо — зум, E — отметить.'}
+              {touch ? 'Джойстик — ходьба, проведите по сцене — поворот камеры.' : 'WASD / стрелки — ходьба, Shift — бег, мышь — поворот камеры, колесо — зум, E — отметить следующее, 1–9 — отметить или снять карточку по номеру.'}
             </span>
           </div>
         )}
@@ -128,14 +149,20 @@ export default function Walk3DScreen() {
               const n = marked.indexOf(id)
               return (
                 <div key={id} className="flex items-center gap-3 rounded-xl bg-white/95 p-2.5 pl-3.5 shadow-lg">
-                  <Search className="h-4 w-4 shrink-0 text-accent" />
+                  {touch ? (
+                    <Search className="h-4 w-4 shrink-0 text-accent" />
+                  ) : (
+                    <kbd className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md border border-line text-xs font-semibold text-muted" title={`Клавиша ${i + 1}`}>
+                      {i + 1}
+                    </kbd>
+                  )}
                   <span className="flex-1 text-sm font-medium text-ink">{itemText(id)}</span>
                   <button
                     onClick={() => toggle(id)}
                     className={`shrink-0 rounded-lg px-3 py-1.5 text-sm font-semibold ${n >= 0 ? 'border border-line text-muted' : 'bg-action text-white'}`}
                   >
                     {n >= 0 ? `№${n + 1} · снять` : 'Отметить'}
-                    {i === 0 && !touch && <kbd className="ml-1.5 rounded bg-white/20 px-1 text-xs">E</kbd>}
+                    {id === nextId && !touch && <kbd className="ml-1.5 rounded bg-white/20 px-1 text-xs">E</kbd>}
                   </button>
                 </div>
               )
