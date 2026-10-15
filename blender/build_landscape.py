@@ -46,7 +46,6 @@ YARD = (3, 0, 19, 15)  # двор: x0, y0, x1, y1
 GATE = (9.5, 11.0)     # проём калитки по X на передней стороне двора
 CAR_POS = (-6.0, ROAD_Y + 3.4)  # фургон на обочине вдоль дороги
 KTPN_POS = (-13.0, -2.4)  # КТПН у дороги, левее фургона, ~20 м от дома; 6,8 × 4,8 м, двери к дороге
-MANHOLE_POS = (2.0, -4.6)  # открытый колодец связи между дорогой и двором, на пути к калитке
 
 
 # ---------- Цвета и материалы ----------
@@ -346,8 +345,6 @@ def blocked_for_grass(x, y):
     if abs(x - CAR_POS[0]) < 2.9 and abs(y - CAR_POS[1]) < 1.1:  # место машины, трава не пробьёт кузов
         return True
     if -4.0 < x - KTPN_POS[0] < 3.3 and abs(y - KTPN_POS[1]) < 2.8:  # КТПН
-        return True
-    if -0.8 < x - MANHOLE_POS[0] < 1.7 and -0.8 < y - MANHOLE_POS[1] < 1.2:  # колодец и крышка
         return True
     return False
 
@@ -745,12 +742,9 @@ def build_power_line():
     for i, x in enumerate(POLE_XS):
         z0 = height(x, LINE_Y)
         top = z0 + POLE_H
-        # Опора напротив КТПН — отвлекающий объект задания (всё исправно)
-        pole = MB("item_line-ok" if x == KTPN_POS[0] else f"power_pole_{i}")
+        pole = MB(f"power_pole_{i}")
         pole.cyl((x, LINE_Y, z0 - 0.4), (x, LINE_Y, top), 0.17, 0.10, concrete, n=8)
-        o = pole.build(solid=True)
-        if x == KTPN_POS[0]:
-            o["inspect_range"] = 4.5  # опора за дорогой — осматривается с дороги
+        pole.build(solid=True)
 
         arm_z = top - 0.7
         hw.box((x, LINE_Y, arm_z), (0.08, 1.9, 0.08), steel)  # траверса поперёк линии
@@ -772,25 +766,85 @@ def build_power_line():
     wires.build()
 
 
-# ---------- Колодец связи (нарушение: открыт и не огорожен) ----------
+# ---------- Объекты задания у КТПН: посторонние в опасной зоне, огнетушитель ----------
 
-def build_manhole():
-    """Смотровой колодец кабельной канализации у обочины: бетонная горловина, тёмный проём,
-    снятая чугунная крышка лежит рядом. Ограждения и знаков нет — это нарушение из задания"""
-    iron = mat("Чугун", "#3B3A38", rough=0.6, metal=0.4)
-    dark = mat("Проём колодца", "#0B0C0D", rough=1.0)
-    mb = MB("item_manhole-open")
-    c = V((*MANHOLE_POS, 0))
-    n = 16
-    for k in range(n):  # кольцо горловины из сегментов, чтобы проём остался открытым
-        a = 2 * math.pi * (k + 0.5) / n
-        mb.box(c + V((math.cos(a) * 0.56, math.sin(a) * 0.56, 0.03)), (0.15, 0.24, 0.1), M["concrete"], rz=a)
-    mb.cyl(c + V((0, 0, -0.3)), c + V((0, 0, 0.005)), 0.5, 0.5, dark, n=16)  # глубина — тёмный «колодец»
-    lid = c + V((0.95, 0.45, 0))
-    mb.cyl(lid, lid + V((0, 0, 0.05)), 0.55, 0.55, iron, n=20)
-    for rz in (0, math.pi / 2):  # рёбра на крышке
-        mb.box(lid + V((0, 0, 0.06)), (0.9, 0.05, 0.025), iron, rz=rz + 0.4)
-    mb.build(solid=True)
+def villager(mb, base, facing):
+    """Сельская жительница в платке и длинной юбке, ~1,65 м; facing — угол взгляда (0 — по +Y)"""
+    c, s = math.cos(facing), math.sin(facing)
+    at = lambda dx, dy, dz: V(base) + V((dx * c - dy * s, dx * s + dy * c, dz))
+    skin, scarf = mat("Кожа", "#E9C3A0", rough=0.8), mat("Платок", "#C7354A", rough=0.9)
+    blouse, skirt = mat("Кофта", "#6F8FBF", rough=0.9), mat("Юбка", "#3E3550", rough=0.9)
+    shoes = mat("Обувь", "#2A2421", rough=0.8)
+    for sx in (-1, 1):
+        mb.cyl(at(sx * 0.08, 0, 0), at(sx * 0.08, 0, 0.3), 0.045, 0.04, skin, n=6)
+        mb.box(at(sx * 0.08, 0.04, 0.03), (0.09, 0.2, 0.06), shoes, rz=facing)
+    mb.cyl(at(0, 0, 0.25), at(0, 0, 0.98), 0.3, 0.17, skirt, n=12)  # юбка расширяется книзу
+    mb.cyl(at(0, 0, 0.95), at(0, 0, 1.42), 0.17, 0.15, blouse, n=10)
+    for sx in (-1, 1):
+        mb.cyl(at(sx * 0.2, 0, 1.38), at(sx * 0.24, 0.12, 0.98), 0.05, 0.045, blouse, n=6)  # руки чуть вперёд
+        mb.blob(at(sx * 0.24, 0.13, 0.94), 0.045, skin, bump=0.02)
+    mb.cyl(at(0, 0, 1.42), at(0, 0, 1.5), 0.05, 0.05, skin, n=6)
+    mb.blob(at(0, 0.01, 1.6), 0.11, skin, scale=(0.9, 1, 1.1), bump=0.02)
+    mb.blob(at(0, -0.02, 1.63), 0.125, scarf, scale=(0.95, 0.95, 1.05), bump=0.03)  # платок сзади и сверху
+    mb.cyl(at(0, -0.08, 1.52), at(0, -0.14, 1.36), 0.06, 0.02, scarf, n=6)  # узел платка
+
+
+def dog(mb, base, facing):
+    """Дворовая собака, морда по направлению facing"""
+    c, s = math.cos(facing), math.sin(facing)
+    at = lambda dx, dy, dz: V(base) + V((dx * c - dy * s, dx * s + dy * c, dz))
+    fur, dark = mat("Шерсть", "#9A6A3E", rough=1.0), mat("Шерсть тёмная", "#4A3426", rough=1.0)
+    mb.blob(at(0, 0, 0.45), 0.2, fur, scale=(0.75, 1.55, 0.8), bump=0.05)
+    for sx in (-1, 1):
+        for sy in (-1, 1):
+            mb.cyl(at(sx * 0.09, sy * 0.2, 0), at(sx * 0.09, sy * 0.2, 0.4), 0.035, 0.04, fur, n=6)
+    mb.blob(at(0, 0.36, 0.63), 0.12, fur, bump=0.04)
+    mb.box(at(0, 0.48, 0.6), (0.09, 0.13, 0.08), dark, rz=facing)  # морда
+    for sx in (-1, 1):
+        mb.cyl(at(sx * 0.06, 0.33, 0.72), at(sx * 0.07, 0.32, 0.82), 0.035, 0, dark, n=4)  # уши
+    mb.beam(at(0, -0.3, 0.5), at(0, -0.45, 0.72), 0.04, 0.04, fur)  # хвост вверх
+
+
+def chicken(mb, base, facing):
+    c, s = math.cos(facing), math.sin(facing)
+    at = lambda dx, dy, dz: V(base) + V((dx * c - dy * s, dx * s + dy * c, dz))
+    white, red, beak = mat("Перо", "#F1EEE6", rough=1.0), mat("Гребешок", "#C9302C", rough=0.7), mat("Клюв", "#E7A12B", rough=0.6)
+    mb.blob(at(0, 0, 0.22), 0.12, white, scale=(0.8, 1.15, 0.9), bump=0.05)
+    mb.blob(at(0, 0.11, 0.36), 0.06, white, bump=0.03)
+    mb.box(at(0, 0.11, 0.43), (0.02, 0.06, 0.04), red, rz=facing)
+    mb.cyl(at(0, 0.16, 0.36), at(0, 0.21, 0.355), 0.02, 0, beak, n=4)
+    for sx in (-1, 1):
+        mb.cyl(at(sx * 0.04, 0, 0), at(sx * 0.04, 0, 0.13), 0.01, 0.01, beak, n=4)
+
+
+def build_bystanders():
+    """Посторонние у открытого отсека КТПН — нарушение «Люди и животные в опасной зоне»"""
+    mb = MB("item_people-animals")
+    x0, y0 = KTPN_POS[0], KTPN_POS[1] - 2.2  # фасад КТПН
+    villager(mb, (x0 - 1.0, y0 - 1.9, 0), rad(-15))  # смотрит в открытый отсек
+    dog(mb, (x0 - 2.3, y0 - 1.3, 0), rad(30))
+    for dx, dy, f in ((0.4, -1.2, 120), (0.9, -1.6, -60), (-0.1, -0.8, 200)):
+        chicken(mb, (x0 + dx, y0 + dy, 0), rad(f))
+    o = mb.build()
+    o["inspect_range"] = 3.0  # видно с дороги, подходить вплотную не нужно
+
+
+def build_extinguisher():
+    """Огнетушитель ОП у закрытой створки КТПН — правильно, отвлекающий вариант"""
+    red = mat("Огнетушитель", "#C8201E", rough=0.35, metal=0.2)
+    black = mat("Шланг", "#1C1C1E", rough=0.7)
+    steel = mat("Запорная головка", "#9EA4AA", rough=0.3, metal=0.8)
+    mb = MB("item_extinguisher-ok")
+    p = V((KTPN_POS[0] + 3.1, KTPN_POS[1] - 2.65, 0))
+    mb.cyl(p, p + V((0, 0, 0.5)), 0.085, 0.085, red, n=14)
+    mb.blob(p + V((0, 0, 0.5)), 0.085, red, scale=(1, 1, 0.5), bump=0)
+    mb.cyl(p + V((0, 0, 0.53)), p + V((0, 0, 0.6)), 0.025, 0.025, steel, n=8)
+    mb.box(p + V((0.05, 0, 0.62)), (0.14, 0.03, 0.02), black)  # рычаг
+    mb.box(p + V((0, -0.086, 0.3)), (0.1, 0.004, 0.14), mat("Этикетка", "#F4F1E8", rough=0.6))
+    hose = [p + V((0.03, 0, 0.58)), p + V((0.11, 0, 0.52)), p + V((0.12, 0, 0.3)), p + V((0.1, 0, 0.14))]
+    for a, b in zip(hose, hose[1:]):
+        mb.beam(a, b, 0.022, 0.022, black)
+    mb.build()
 
 
 # ---------- Готовые модели: фургон, КТПН ----------
@@ -901,10 +955,11 @@ def close_ktpn_right_door(meshes):
 
 
 def place_busy_worker():
-    """Монтёр без каски в левом отсеке КТПН: стоит лицом к шкафу управления, руки подняты к нему.
+    """Монтёр в левом отсеке КТПН: стоит лицом к шкафу управления, руки подняты к нему. Один объект — три карточки
+    задания: без каски и в одиночку (нарушения), в диэлектрических ботах (правильно).
     Модель та же, что у игрока (рост такой же: в build_worker.py 1,9 м до верха каски)"""
     rz = math.pi  # лицом к задней стене КТПН (+Y)
-    meshes = place_model(WORKER_GLB, "item_ktpn-no-helmet", (KTPN_POS[0] - 1.9, KTPN_POS[1] + 0.3), rz,
+    meshes = place_model(WORKER_GLB, "item_no-helmet+alone+boots-ok", (KTPN_POS[0] - 1.9, KTPN_POS[1] + 0.3), rz,
                          scale=1.9 / 2.64, base_z=0.2,  # 0,2 м — стальной пол КТПН
                          solid=False, fit_logos=False, smooth=True,
                          inspect=3.5,  # стоит в глубине КТПН — осматривается от входа
@@ -918,6 +973,12 @@ def place_busy_worker():
         m = Matrix.Translation(pivot) @ Matrix.Rotation(rad(angle), 4, axis) @ Matrix.Translation(-pivot)
         for o in arm:
             o.matrix_world = m @ o.matrix_world
+    # Диэлектрические боты: тёмная матовая резина вместо обычных ботинок
+    rubber = mat("Диэлектрическая резина", "#1E1F21", rough=0.55)
+    for o in meshes:
+        if o.name.startswith("boot"):
+            o.data.materials.clear()
+            o.data.materials.append(rubber)
 
 
 # ---------- Сборка ----------
@@ -937,7 +998,8 @@ def build():
     build_trees()
     build_far_houses()
     build_power_line()
-    build_manhole()
+    build_bystanders()
+    build_extinguisher()
 
     # Точки маршрута: старт на дороге, финиш у калитки
     empty("spawn_A", (-20.0, ROAD_Y, 0))  # западнее КТПН: маршрут идёт мимо КТПН, фургона и колодца
@@ -946,7 +1008,7 @@ def build():
     empty("place_ats", (-8.0, 7.0, 0))
     # Объекты задания «Улица у КТПН» (public/walk-tasks.json) называются item_<id карточки>
     place_model(VAN_GLB, "item_van-ok", CAR_POS, math.pi)  # мордой по +X вдоль дороги
-    close_ktpn_right_door(place_model(KTPN_GLB, "item_ktpn-no-signs", KTPN_POS, 0))  # дверями к дороге
+    close_ktpn_right_door(place_model(KTPN_GLB, "item_zone-unfenced", KTPN_POS, 0))  # дверями к дороге; вокруг нет ограждения
     place_busy_worker()
     empty("place_worker", (-1.0, -4.0, 0))
 

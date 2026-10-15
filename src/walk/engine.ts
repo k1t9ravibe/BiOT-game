@@ -4,7 +4,8 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
 /**
  * Движок режима ходьбы: загружает сцену из Blender (.glb), персонажа, управляет камерой от третьего лица.
  * Роли объектов берутся из имён в .glb (см. blender/build_t1.py):
- *   item_<id> — можно осмотреть (свойство inspect_range — свой радиус осмотра, м), wall_* или свойство solid — препятствие,
+ *   item_<id> — можно осмотреть (свойство inspect_range — свой радиус осмотра, м); к одному объекту можно привязать
+ *   несколько карточек: item_<id1>+<id2>, wall_* или свойство solid — препятствие,
  *   spawn_A / goal_B — точки маршрута.
  */
 
@@ -137,7 +138,8 @@ export class WalkEngine {
           mats.push(...cloned)
         })
         const range = Number(o.userData.inspect_range) || INSPECT_RANGE
-        this.items.push({ id: name.slice(5), obj: o, box: new THREE.Box3().setFromObject(o), mats, range })
+        const box = new THREE.Box3().setFromObject(o)
+        for (const id of name.slice(5).split('+')) this.items.push({ id, obj: o, box, mats, range })
       }
     }
 
@@ -259,6 +261,8 @@ export class WalkEngine {
 
   /** Номера над отмеченными объектами */
   setMarked(ids: string[]) {
+    // Если у объекта отмечено несколько карточек, номера встают столбиком
+    const stacked = new Map<THREE.Object3D, number>()
     for (const it of this.items) {
       const n = ids.indexOf(it.id)
       if (it.marker) {
@@ -270,7 +274,9 @@ export class WalkEngine {
       if (n >= 0) {
         const s = this.makeSprite(String(n + 1), '#1E6BFF')
         const c = it.box.getCenter(new THREE.Vector3())
-        s.position.set(c.x, it.box.max.y + 0.5, c.z)
+        const k = stacked.get(it.obj) ?? 0
+        stacked.set(it.obj, k + 1)
+        s.position.set(c.x, it.box.max.y + 0.5 + k * 0.7, c.z)
         s.scale.set(0.6, 0.6, 1)
         it.marker = s
         this.scene.add(s)
