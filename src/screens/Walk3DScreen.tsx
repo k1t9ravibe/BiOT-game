@@ -9,13 +9,20 @@ import { WalkEngine } from '../walk/engine'
 import type { Task, TaskResult } from '../types'
 
 /**
- * Прототип режима ходьбы (/walk): 3D-сцена из Blender, игрок идёт от фургона (A) к опоре (B),
- * по пути осматривает объекты и отмечает нарушения. Карточки и баллы — из того же tasks.json.
+ * Режим ходьбы (/walk): 3D-сцена из Blender, игрок идёт от точки A к точке B,
+ * по пути осматривает объекты и отмечает нарушения. Карточки и баллы — в формате tasks.json.
+ * Объекты сцены с именем item_<id> соответствуют карточкам задания с тем же id.
  */
 
-const TASK_ID = 't1'
+/** Задание и маршрут для каждой сцены. Задания режима ходьбы лежат отдельно (walk-tasks.json),
+ *  чтобы не попасть в основной тренажёр с картинками */
+const SCENES: Record<string, { tasksUrl: string; taskId: string; title: string; route: string }> = {
+  landscape: { tasksUrl: '/walk-tasks.json', taskId: 'landscape', title: 'Улица у КТПН', route: 'Пройдите по улице от точки A до калитки дома (B).' },
+  t1: { tasksUrl: config.tasksUrl, taskId: 't1', title: 'Опора у сельской АТС', route: 'Дойдите от фургона (A) до опоры (B).' },
+}
 /** По умолчанию ландшафт; другую сцену можно выбрать параметром: /walk?scene=t1 → /models/t1.glb */
 const SCENE_NAME = new URLSearchParams(location.search).get('scene')?.replace(/[^\w-]/g, '') || 'landscape'
+const SCENE = SCENES[SCENE_NAME] ?? SCENES.landscape
 const SCENE_URL = `/models/${SCENE_NAME}.glb`
 const WORKER_URL = '/models/worker.glb'
 /** На каком расстоянии от B можно завершить осмотр */
@@ -35,9 +42,9 @@ export default function Walk3DScreen() {
 
   // Карточки задания — из tasks.json
   useEffect(() => {
-    fetch(config.tasksUrl, { cache: 'no-store' })
+    fetch(SCENE.tasksUrl, { cache: 'no-store' })
       .then((r) => r.json())
-      .then((d: Task[]) => setTask(d.find((t) => t.id === TASK_ID) ?? null))
+      .then((d: Task[]) => setTask(d.find((t) => t.id === SCENE.taskId) ?? null))
       .catch((e: Error) => setStatus(e.message))
   }, [])
 
@@ -93,8 +100,8 @@ export default function Walk3DScreen() {
             <button onClick={() => setHint(false)} className="absolute right-2.5 top-2.5 opacity-80" aria-label="Закрыть">
               <X className="h-4 w-4" />
             </button>
-            <b className="mb-1 block">{task?.title ?? 'Опора у сельской АТС'}</b>
-            Дойдите от фургона (A) до опоры (B). По пути подходите к объектам и отмечайте нарушения — в порядке от наиболее критичного.
+            <b className="mb-1 block">{task?.title ?? SCENE.title}</b>
+            {SCENE.route} По пути подходите к объектам и отмечайте нарушения — в порядке от наиболее критичного.
             <span className="mt-2 block text-white/75">
               {touch ? 'Джойстик — ходьба, проведите по сцене — поворот камеры.' : 'WASD / стрелки — ходьба, Shift — бег, мышь — поворот камеры, колесо — зум, E — отметить.'}
             </span>

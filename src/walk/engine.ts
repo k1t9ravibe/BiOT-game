@@ -4,7 +4,8 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
 /**
  * Движок режима ходьбы: загружает сцену из Blender (.glb), персонажа, управляет камерой от третьего лица.
  * Роли объектов берутся из имён в .glb (см. blender/build_t1.py):
- *   item_<id> — можно осмотреть, wall_* или свойство solid — препятствие, spawn_A / goal_B — точки маршрута.
+ *   item_<id> — можно осмотреть (свойство inspect_range — свой радиус осмотра, м), wall_* или свойство solid — препятствие,
+ *   spawn_A / goal_B — точки маршрута.
  */
 
 export interface EngineCallbacks {
@@ -24,6 +25,8 @@ interface Inspectable {
   box: THREE.Box3
   mats: THREE.MeshStandardMaterial[]
   marker?: THREE.Sprite
+  /** Радиус осмотра, м */
+  range: number
 }
 
 const INSPECT_RANGE = 2.2
@@ -133,7 +136,8 @@ export class WalkEngine {
           mesh.material = Array.isArray(mesh.material) ? cloned : cloned[0]
           mats.push(...cloned)
         })
-        this.items.push({ id: name.slice(5), obj: o, box: new THREE.Box3().setFromObject(o), mats })
+        const range = Number(o.userData.inspect_range) || INSPECT_RANGE
+        this.items.push({ id: name.slice(5), obj: o, box: new THREE.Box3().setFromObject(o), mats, range })
       }
     }
 
@@ -358,7 +362,7 @@ export class WalkEngine {
         const dz = Math.max(it.box.min.z - p.z, 0, p.z - it.box.max.z)
         return { it, d: Math.hypot(dx, dz) }
       })
-      .filter((x) => x.d < INSPECT_RANGE)
+      .filter((x) => x.d < x.it.range)
       .sort((a, b) => a.d - b.d)
       .map((x) => x.it.id)
 

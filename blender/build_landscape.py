@@ -46,6 +46,7 @@ YARD = (3, 0, 19, 15)  # двор: x0, y0, x1, y1
 GATE = (9.5, 11.0)     # проём калитки по X на передней стороне двора
 CAR_POS = (-6.0, ROAD_Y + 3.4)  # фургон на обочине вдоль дороги
 KTPN_POS = (-13.0, -2.4)  # КТПН у дороги, левее фургона, ~20 м от дома; 6,8 × 4,8 м, двери к дороге
+MANHOLE_POS = (2.0, -4.6)  # открытый колодец связи между дорогой и двором, на пути к калитке
 
 
 # ---------- Цвета и материалы ----------
@@ -345,6 +346,8 @@ def blocked_for_grass(x, y):
     if abs(x - CAR_POS[0]) < 2.9 and abs(y - CAR_POS[1]) < 1.1:  # место машины, трава не пробьёт кузов
         return True
     if -4.0 < x - KTPN_POS[0] < 3.3 and abs(y - KTPN_POS[1]) < 2.8:  # КТПН
+        return True
+    if -0.8 < x - MANHOLE_POS[0] < 1.7 and -0.8 < y - MANHOLE_POS[1] < 1.2:  # колодец и крышка
         return True
     return False
 
@@ -742,9 +745,12 @@ def build_power_line():
     for i, x in enumerate(POLE_XS):
         z0 = height(x, LINE_Y)
         top = z0 + POLE_H
-        pole = MB(f"power_pole_{i}")
+        # Опора напротив КТПН — отвлекающий объект задания (всё исправно)
+        pole = MB("item_line-ok" if x == KTPN_POS[0] else f"power_pole_{i}")
         pole.cyl((x, LINE_Y, z0 - 0.4), (x, LINE_Y, top), 0.17, 0.10, concrete, n=8)
-        pole.build(solid=True)
+        o = pole.build(solid=True)
+        if x == KTPN_POS[0]:
+            o["inspect_range"] = 4.5  # опора за дорогой — осматривается с дороги
 
         arm_z = top - 0.7
         hw.box((x, LINE_Y, arm_z), (0.08, 1.9, 0.08), steel)  # траверса поперёк линии
@@ -764,6 +770,27 @@ def build_power_line():
             for p, q in zip(pts, pts[1:]):
                 wires.beam(p, q, 0.022, 0.022, wire)
     wires.build()
+
+
+# ---------- Колодец связи (нарушение: открыт и не огорожен) ----------
+
+def build_manhole():
+    """Смотровой колодец кабельной канализации у обочины: бетонная горловина, тёмный проём,
+    снятая чугунная крышка лежит рядом. Ограждения и знаков нет — это нарушение из задания"""
+    iron = mat("Чугун", "#3B3A38", rough=0.6, metal=0.4)
+    dark = mat("Проём колодца", "#0B0C0D", rough=1.0)
+    mb = MB("item_manhole-open")
+    c = V((*MANHOLE_POS, 0))
+    n = 16
+    for k in range(n):  # кольцо горловины из сегментов, чтобы проём остался открытым
+        a = 2 * math.pi * (k + 0.5) / n
+        mb.box(c + V((math.cos(a) * 0.56, math.sin(a) * 0.56, 0.03)), (0.15, 0.24, 0.1), M["concrete"], rz=a)
+    mb.cyl(c + V((0, 0, -0.3)), c + V((0, 0, 0.005)), 0.5, 0.5, dark, n=16)  # глубина — тёмный «колодец»
+    lid = c + V((0.95, 0.45, 0))
+    mb.cyl(lid, lid + V((0, 0, 0.05)), 0.55, 0.55, iron, n=20)
+    for rz in (0, math.pi / 2):  # рёбра на крышке
+        mb.box(lid + V((0, 0, 0.06)), (0.9, 0.05, 0.025), iron, rz=rz + 0.4)
+    mb.build(solid=True)
 
 
 # ---------- Готовые модели: фургон, КТПН ----------
@@ -809,7 +836,8 @@ def fit_decal_aspect(o):
             v.co[up] = mid[up] + (v.co[up] - mid[up]) / k
 
 
-def place_model(path, name, pos, rz, scale=1.0, base_z=0.0, solid=True, fit_logos=True, smooth=False, drop=()):
+def place_model(path, name, pos, rz, scale=1.0, base_z=0.0, solid=True, fit_logos=True, smooth=False, drop=(),
+                inspect=None):
     """Ставит готовую модель из blender/assets нижней точкой на высоту base_z в точку pos, повернув на rz
     вокруг вертикали. Файлы этих моделей сохранены с осью Z вверх (а glTF ждёт Y), низ не всегда на нуле,
     логотипы бывают зеркальными или растянутыми — всё поправляется здесь. solid — модель целиком препятствие.
@@ -826,6 +854,8 @@ def place_model(path, name, pos, rz, scale=1.0, base_z=0.0, solid=True, fit_logo
     root.scale = (scale,) * 3
     if solid:
         root["solid"] = 1
+    if inspect:
+        root["inspect_range"] = inspect  # свой радиус осмотра для объекта задания (item_*)
     for o in new:
         if o.parent is None:
             o.parent = root
@@ -874,9 +904,10 @@ def place_busy_worker():
     """Монтёр без каски в левом отсеке КТПН: стоит лицом к шкафу управления, руки подняты к нему.
     Модель та же, что у игрока (рост такой же: в build_worker.py 1,9 м до верха каски)"""
     rz = math.pi  # лицом к задней стене КТПН (+Y)
-    meshes = place_model(WORKER_GLB, "npc_worker_no_helmet", (KTPN_POS[0] - 1.9, KTPN_POS[1] + 0.3), rz,
+    meshes = place_model(WORKER_GLB, "item_ktpn-no-helmet", (KTPN_POS[0] - 1.9, KTPN_POS[1] + 0.3), rz,
                          scale=1.9 / 2.64, base_z=0.2,  # 0,2 м — стальной пол КТПН
                          solid=False, fit_logos=False, smooth=True,
+                         inspect=3.5,  # стоит в глубине КТПН — осматривается от входа
                          drop=("hard_hat_dome", "helmet_brim", "helmet_front_rim"))
     forward = V((math.sin(rz), -math.cos(rz), 0))
     axis = forward.cross(V((0, 0, 1)))  # поворот вокруг этой оси поднимает руку вперёд
@@ -906,14 +937,16 @@ def build():
     build_trees()
     build_far_houses()
     build_power_line()
+    build_manhole()
 
     # Точки маршрута: старт на дороге, финиш у калитки
-    empty("spawn_A", (-2.0, ROAD_Y, 0))
+    empty("spawn_A", (-20.0, ROAD_Y, 0))  # западнее КТПН: маршрут идёт мимо КТПН, фургона и колодца
     empty("goal_B", (PATH_X, -1.2, 0))
     # Места для объектов, которые добавляются вручную (игра их не использует)
     empty("place_ats", (-8.0, 7.0, 0))
-    place_model(VAN_GLB, "van", CAR_POS, math.pi)  # мордой по +X вдоль дороги
-    close_ktpn_right_door(place_model(KTPN_GLB, "ktpn", KTPN_POS, 0))  # дверями к дороге
+    # Объекты задания «Улица у КТПН» (public/walk-tasks.json) называются item_<id карточки>
+    place_model(VAN_GLB, "item_van-ok", CAR_POS, math.pi)  # мордой по +X вдоль дороги
+    close_ktpn_right_door(place_model(KTPN_GLB, "item_ktpn-no-signs", KTPN_POS, 0))  # дверями к дороге
     place_busy_worker()
     empty("place_worker", (-1.0, -4.0, 0))
 
