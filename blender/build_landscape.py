@@ -1,6 +1,6 @@
 """
 Сельский ландшафт для режима ходьбы: рельеф, грунтовая дорога, трава, дом с двором, заборы, лестница, деревья.
-Фургон берётся готовым из blender/assets/kazakhtelecom_rounded_van.glb.
+Фургон берётся готовым из blender/assets/kazakhtelecom_faceted_van.glb.
 АТС и людей сюда не ставим: их добавляют вручную в Blender, места помечены пустышками place_*.
 
 Запуск (из корня проекта):
@@ -28,7 +28,7 @@ from mathutils import noise
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 OUT_GLB = os.path.join(ROOT, "public", "models", "landscape.glb")
 OUT_BLEND = os.path.join(ROOT, "blender", "landscape_base.blend")
-VAN_GLB = os.path.join(ROOT, "blender", "assets", "kazakhtelecom_rounded_van.glb")
+VAN_GLB = os.path.join(ROOT, "blender", "assets", "kazakhtelecom_faceted_van.glb")
 
 random.seed(7)
 rad = math.radians
@@ -708,23 +708,70 @@ def build_far_houses():
 
 # ---------- Готовая модель фургона ----------
 
+def unmirror_decal(o, center):
+    """Если наклейка читается зеркально для зрителя снаружи, переворачивает её UV по горизонтали"""
+    me, mw = o.data, o.matrix_world
+    uv = me.uv_layers.active.data
+    poly = me.polygons[0]
+    loops = list(poly.loop_indices)
+    pts = [mw @ me.vertices[me.loops[i].vertex_index].co for i in loops]
+    us = [uv[i].uv.x for i in loops]
+    du = pts[us.index(max(us))] - pts[us.index(min(us))]
+    n = (mw.to_3x3() @ poly.normal).normalized()
+    if n.dot(sum(pts, V()) / len(pts) - center) < 0:
+        n = -n  # нормаль наружу от центра фургона
+    right = (-n).cross(V((0, 0, 1)))  # «вправо» для зрителя, который смотрит на борт
+    if du.dot(right) < 0:
+        for l in uv:
+            l.uv.x = 1 - l.uv.x
+
+
+def fit_decal_aspect(o):
+    """Вписывает наклейку в её прямоугольник с пропорциями картинки, чтобы логотип не был растянут"""
+    img = next((n.image for m in o.data.materials if m and m.node_tree
+                for n in m.node_tree.nodes if n.type == "TEX_IMAGE" and n.image), None)
+    if not img or not img.size[1]:
+        return
+    vs = [v.co for v in o.data.vertices]
+    lo = V([min(c[i] for c in vs) for i in range(3)])
+    hi = V([max(c[i] for c in vs) for i in range(3)])
+    size = hi - lo
+    flat = min(range(3), key=lambda i: size[i])  # ось толщины наклейки
+    up = 1  # в импортированной модели (ещё до поворота) высота — локальная −Y, ширина — X или Z
+    across = next(i for i in range(3) if i not in (flat, up))
+    want = img.size[0] / img.size[1]
+    k = want / (size[across] / size[up])
+    mid = (lo + hi) / 2
+    for v in o.data.vertices:
+        if k < 1:
+            v.co[across] = mid[across] + (v.co[across] - mid[across]) * k
+        else:
+            v.co[up] = mid[up] + (v.co[up] - mid[up]) / k
+
+
 def place_van():
-    """Ставит blender/assets/kazakhtelecom_rounded_van.glb на обочину вместо пустышки place_car.
-    Файл сохранён с осью Z вверх (а glTF ждёт Y) и колёсами на 0,36 м над землёй — поправляем поворотом и сдвигом"""
+    """Ставит blender/assets/kazakhtelecom_faceted_van.glb на обочину вместо пустышки place_car.
+    Файлы этих моделей сохранены с осью Z вверх (а glTF ждёт Y), мордой по −X, колёса не на нуле,
+    логотип на одном борту зеркальный — всё поправляется здесь, под любую из них"""
     before = set(bpy.data.objects)
     bpy.ops.import_scene.gltf(filepath=VAN_GLB)
     new = [o for o in bpy.data.objects if o not in before]
-    root = empty("van", (*CAR_POS, -0.36))
+    root = empty("van", (*CAR_POS, 0))
     root.rotation_euler = (rad(-90), 0, math.pi)  # встаёт на колёса и смотрит мордой по +X
     root["solid"] = 1  # препятствие по габаритам всего фургона
     for o in new:
         if o.parent is None:
             o.parent = root
-    # На правом борту (по файлу +Y) логотип в файле отзеркален
-    logo = bpy.data.objects.get("Kazakhtelecom_logo_right")
-    if logo:
-        for l in logo.data.uv_layers.active.data:
-            l.uv.x = 1 - l.uv.x
+    bpy.context.view_layer.update()
+    meshes = [o for o in new if o.type == "MESH"]
+    # Опускаем на колёса: самая нижняя точка модели — на землю
+    root.location.z -= min((o.matrix_world @ v.co).z for o in meshes for v in o.data.vertices)
+    bpy.context.view_layer.update()
+    center = root.matrix_world.translation
+    for o in meshes:
+        if "logo" in o.name.lower() and o.data.uv_layers:
+            fit_decal_aspect(o)
+            unmirror_decal(o, center)
 
 
 # ---------- Сборка ----------
