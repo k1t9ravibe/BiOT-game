@@ -791,6 +791,31 @@ def place_model(path, name, pos, rz, scale=1.0, base_z=0.0, solid=True, fit_logo
     return meshes
 
 
+def close_ktpn_right_door(meshes):
+    """В модели КТПН обе створки распахнуты; правую (там, где нет монтёра) закрываем:
+    поворачиваем её вокруг петли у среднего столба, пока она не ляжет вдоль фасада к правому столбу"""
+    door = [o for o in meshes if o.name == "OPEN BLUE DOOR 2" or o.name.startswith("door 2 ") or o.name == "door handle 1"]
+    posts = {o.name: o for o in meshes if o.name.startswith("front post")}
+
+    def center(o):
+        pts = [o.matrix_world @ v.co for v in o.data.vertices]
+        return sum(pts, V()) / len(pts)
+
+    hinge, far_post = center(posts["front post 0"]), center(posts["front post 2.8"])
+    panel = next(o for o in door if o.name == "OPEN BLUE DOOR 2")
+    tip = max((panel.matrix_world @ v.co for v in panel.data.vertices),
+              key=lambda p: (p.x - hinge.x) ** 2 + (p.y - hinge.y) ** 2)
+    now = math.atan2(tip.y - hinge.y, tip.x - hinge.x)
+    want = math.atan2(far_post.y - hinge.y, far_post.x - hinge.x)
+    h = V((hinge.x, hinge.y, 0))
+    # Створка в модели уже проёма — растягиваем по ширине до правого столба (минус его полутолщина)
+    k = ((far_post - hinge).to_2d().length - 0.06) / (tip - hinge).to_2d().length
+    stretch = (Matrix.Rotation(want, 4, "Z") @ Matrix.Diagonal((k, 1, 1, 1)) @ Matrix.Rotation(-want, 4, "Z"))
+    m = Matrix.Translation(h) @ stretch @ Matrix.Rotation(want - now, 4, "Z") @ Matrix.Translation(-h)
+    for o in door:
+        o.matrix_world = m @ o.matrix_world
+
+
 def place_busy_worker():
     """Монтёр без каски в левом отсеке КТПН: стоит лицом к шкафу управления, руки подняты к нему.
     Модель та же, что у игрока (рост такой же: в build_worker.py 1,9 м до верха каски)"""
@@ -833,7 +858,7 @@ def build():
     # Места для объектов, которые добавляются вручную (игра их не использует)
     empty("place_ats", (-8.0, 7.0, 0))
     place_model(VAN_GLB, "van", CAR_POS, math.pi)  # мордой по +X вдоль дороги
-    place_model(KTPN_GLB, "ktpn", KTPN_POS, 0)  # дверями к дороге
+    close_ktpn_right_door(place_model(KTPN_GLB, "ktpn", KTPN_POS, 0))  # дверями к дороге
     place_busy_worker()
     empty("place_worker", (-1.0, -4.0, 0))
 
