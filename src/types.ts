@@ -27,6 +27,9 @@ export interface Task {
   image: string
   layout: Layout
   timeLimitSec?: number
+  /** Описание ситуации — показывается во всплывающем окне перед началом задания (режим ходьбы).
+   *  Абзацы разделяются пустой строкой */
+  briefing?: string
   items: TaskItem[]
 }
 

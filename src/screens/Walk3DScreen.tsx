@@ -38,7 +38,13 @@ export default function Walk3DScreen() {
   const [distB, setDistB] = useState<number | null>(null)
   const [result, setResult] = useState<TaskResult | null>(null)
   const [hint, setHint] = useState(true)
-  const [startedAt] = useState(() => Date.now())
+  /** Задание начинается после окна «Ситуация»: до этого игрок стоит, время не идёт */
+  const [started, setStarted] = useState(false)
+  const startedAt = useRef(0)
+  const start = () => {
+    startedAt.current = Date.now()
+    setStarted(true)
+  }
 
   // Карточки задания — из tasks.json
   useEffect(() => {
@@ -86,7 +92,11 @@ export default function Walk3DScreen() {
   }, [toggle])
 
   useEffect(() => engineRef.current?.setMarked(marked), [marked])
-  useEffect(() => engineRef.current?.setPaused(!!result), [result])
+  useEffect(() => engineRef.current?.setPaused(!started || !!result), [started, result])
+  // Если у задания нет описания ситуации, начинаем сразу
+  useEffect(() => {
+    if (task && !task.briefing && !started) start()
+  }, [task, started])
 
   const move = (from: string, to: string) =>
     setMarked((m) => {
@@ -95,7 +105,7 @@ export default function Walk3DScreen() {
       return a
     })
 
-  const finish = () => task && setResult(scoreTask(task, marked, Math.round((Date.now() - startedAt) / 1000), false))
+  const finish = () => task && setResult(scoreTask(task, marked, Math.round((Date.now() - startedAt.current) / 1000), false))
 
   const itemText = (id: string) => task?.items.find((i) => i.id === id)?.text ?? id
   const atGoal = distB !== null && distB <= GOAL_RADIUS
@@ -116,7 +126,29 @@ export default function Walk3DScreen() {
         )}
 
         {/* Задание и управление */}
-        {hint && status === 'ready' && (
+        {/* Ситуация перед началом задания */}
+        {status === 'ready' && !started && task?.briefing && (
+          <div className="absolute inset-0 z-20 flex items-center justify-center bg-navy/60 p-3">
+            <div className="flex max-h-full w-full max-w-lg flex-col rounded-2xl bg-white shadow-2xl">
+              <div className="px-5 pb-2 pt-5">
+                <div className="text-xs font-semibold uppercase tracking-wide text-accent">Ситуация</div>
+                <h2 className="text-lg font-bold text-navy">{task.title}</h2>
+              </div>
+              <div className="thin-scroll min-h-0 flex-1 space-y-3 overflow-y-auto px-5 pb-4 text-[15px] leading-relaxed text-ink">
+                {task.briefing.split(/\n\s*\n/).map((p, i) => (
+                  <p key={i}>{p}</p>
+                ))}
+              </div>
+              <div className="border-t border-line p-4">
+                <button onClick={start} autoFocus className="w-full rounded-[10px] bg-action py-2.5 font-semibold text-white transition hover:bg-action-dark">
+                  Начать осмотр
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {hint && status === 'ready' && started && (
           <div className="absolute left-3 top-3 max-w-sm rounded-xl bg-navy/85 p-4 pr-9 text-sm leading-snug text-white shadow-lg backdrop-blur-sm">
             <button onClick={() => setHint(false)} className="absolute right-2.5 top-2.5 opacity-80" aria-label="Закрыть">
               <X className="h-4 w-4" />
@@ -143,7 +175,7 @@ export default function Walk3DScreen() {
         )}
 
         {/* Что рядом с игроком */}
-        {!result && near.length > 0 && (
+        {!result && started && near.length > 0 && (
           <div className="absolute bottom-40 left-1/2 flex w-[min(92vw,420px)] -translate-x-1/2 flex-col gap-2 sm:bottom-6">
             {near.map((id, i) => {
               const n = marked.indexOf(id)
@@ -171,7 +203,7 @@ export default function Walk3DScreen() {
         )}
 
         {/* До точки B и завершение */}
-        {!result && status === 'ready' && (
+        {!result && started && status === 'ready' && (
           <div className="absolute bottom-3 right-3 flex items-center gap-2">
             {distB !== null && !atGoal && (
               <span className="rounded-lg bg-navy/85 px-3 py-2 text-sm font-semibold text-white">До точки B: {distB} м</span>
@@ -187,7 +219,7 @@ export default function Walk3DScreen() {
           </div>
         )}
 
-        {touch && !result && status === 'ready' && <Joystick onChange={(x, y) => engineRef.current?.setStick(x, y)} />}
+        {touch && !result && started && status === 'ready' && <Joystick onChange={(x, y) => engineRef.current?.setStick(x, y)} />}
 
         {/* Разбор — тот же, что в основном тренажёре */}
         {result && task && (
