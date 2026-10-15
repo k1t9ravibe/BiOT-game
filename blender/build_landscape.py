@@ -1,5 +1,6 @@
 """
-Сельский ландшафт для режима ходьбы: рельеф, грунтовая дорога, трава, дом с двором, заборы, лестница, деревья.
+Сельский ландшафт для режима ходьбы: рельеф, грунтовая дорога, трава, дом с двором, заборы, лестница, деревья,
+ВЛ 10 кВ вдоль дороги (бетонные опоры, изоляторы, провода).
 Фургон и КТПН берутся готовыми из blender/assets (kazakhtelecom_faceted_van.glb, kazakhtelecom_substation_no_signs.glb).
 АТС и людей сюда не ставим: их добавляют вручную в Blender, места помечены пустышками place_*.
 
@@ -712,6 +713,59 @@ def build_far_houses():
         mb.build()
 
 
+# ---------- ВЛ 10 кВ вдоль дороги ----------
+
+LINE_Y = ROAD_Y - 3.0  # опоры по другую сторону дороги от КТПН, между обочиной и жердевым забором
+POLE_XS = [KTPN_POS[0] + 25 * k for k in range(-2, 4)]  # пролёт 25 м, одна опора — напротив КТПН
+POLE_H = 9.0  # высота опоры над землёй
+
+
+def insulator(mb, base, steel, porcelain):
+    """Штыревой изолятор: стальной штырь и фарфоровая «юбка». Возвращает точку крепления провода"""
+    b = V(base)
+    mb.cyl(b, b + V((0, 0, 0.09)), 0.018, 0.018, steel, n=6)
+    for z0, z1, r0, r1 in ((0.09, 0.13, 0.075, 0.07), (0.13, 0.20, 0.05, 0.05), (0.20, 0.24, 0.07, 0.065), (0.24, 0.30, 0.04, 0.03)):
+        mb.cyl(b + V((0, 0, z0)), b + V((0, 0, z1)), r0, r1, porcelain, n=10)
+    return b + V((0, 0, 0.27))
+
+
+def build_power_line():
+    """Опоры ВЛ 10 кВ из центрифугированного бетона: траверса с подкосами, три изолятора (два на траверсе,
+    один на макушке), три провода с провисом. Ствол каждой опоры — отдельный объект-препятствие"""
+    concrete = mat("Бетон опор", "#A7A9A4", rough=0.9)
+    steel = mat("Траверса", "#4B5056", rough=0.5, metal=0.6)
+    porcelain = mat("Изоляторы", "#E9E6DC", rough=0.3)
+    wire = mat("Провод", "#2A2B2D", rough=0.5, metal=0.5)
+
+    hw = MB("power_line_hardware")
+    phases = []  # по опорам: три точки крепления проводов
+    for i, x in enumerate(POLE_XS):
+        z0 = height(x, LINE_Y)
+        top = z0 + POLE_H
+        pole = MB(f"power_pole_{i}")
+        pole.cyl((x, LINE_Y, z0 - 0.4), (x, LINE_Y, top), 0.17, 0.10, concrete, n=8)
+        pole.build(solid=True)
+
+        arm_z = top - 0.7
+        hw.box((x, LINE_Y, arm_z), (0.08, 1.9, 0.08), steel)  # траверса поперёк линии
+        hw.box((x + 0.06, LINE_Y, arm_z - 0.05), (0.04, 0.24, 0.3), steel)  # хомут
+        for s in (-1, 1):
+            hw.beam((x, LINE_Y, arm_z - 0.75), (x, LINE_Y + s * 0.7, arm_z - 0.04), 0.035, 0.035, steel)
+        hw.box((x, LINE_Y, top + 0.06), (0.16, 0.16, 0.12), steel)  # оголовок под верхний изолятор
+        phases.append([insulator(hw, (x, LINE_Y + s * 0.85, arm_z + 0.04), steel, porcelain) for s in (-1, 1)]
+                      + [insulator(hw, (x, LINE_Y, top + 0.12), steel, porcelain)])
+    hw.build()
+
+    wires = MB("power_line_wires")
+    for a_pts, b_pts in zip(phases, phases[1:]):
+        for a, b in zip(a_pts, b_pts):
+            sag, n = 0.55, 12
+            pts = [a + (b - a) * (k / n) - V((0, 0, 4 * sag * (k / n) * (1 - k / n))) for k in range(n + 1)]
+            for p, q in zip(pts, pts[1:]):
+                wires.beam(p, q, 0.022, 0.022, wire)
+    wires.build()
+
+
 # ---------- Готовые модели: фургон, КТПН ----------
 
 def unmirror_decal(o, center):
@@ -851,6 +905,7 @@ def build():
     build_fences()
     build_trees()
     build_far_houses()
+    build_power_line()
 
     # Точки маршрута: старт на дороге, финиш у калитки
     empty("spawn_A", (-2.0, ROAD_Y, 0))
