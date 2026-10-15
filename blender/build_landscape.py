@@ -1,6 +1,6 @@
 """
 Сельский ландшафт для режима ходьбы: рельеф, грунтовая дорога, трава, дом с двором, заборы, лестница, деревья.
-Фургон и КТПН берутся готовыми из blender/assets (kazakhtelecom_faceted_van.glb, kazakhtelecom_substation_open_smoke.glb).
+Фургон и КТПН берутся готовыми из blender/assets (kazakhtelecom_faceted_van.glb, kazakhtelecom_substation_solid_no_smoke.glb).
 АТС и людей сюда не ставим: их добавляют вручную в Blender, места помечены пустышками place_*.
 
 Запуск (из корня проекта):
@@ -29,7 +29,7 @@ ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 OUT_GLB = os.path.join(ROOT, "public", "models", "landscape.glb")
 OUT_BLEND = os.path.join(ROOT, "blender", "landscape_base.blend")
 VAN_GLB = os.path.join(ROOT, "blender", "assets", "kazakhtelecom_faceted_van.glb")
-KTPN_GLB = os.path.join(ROOT, "blender", "assets", "kazakhtelecom_substation_open_smoke.glb")
+KTPN_GLB = os.path.join(ROOT, "blender", "assets", "kazakhtelecom_substation_solid_no_smoke.glb")
 
 random.seed(7)
 rad = math.radians
@@ -42,7 +42,7 @@ PATH_X = 10.25    # тропинка от дороги к калитке и кр
 YARD = (3, 0, 19, 15)  # двор: x0, y0, x1, y1
 GATE = (9.5, 11.0)     # проём калитки по X на передней стороне двора
 CAR_POS = (-6.0, ROAD_Y + 3.4)  # фургон на обочине вдоль дороги
-KTPN_POS = (-1.4, 6.0)  # КТПН слева от двора (забор на x = 3), 6,8 × 4,8 м
+KTPN_POS = (-13.0, -2.4)  # КТПН у дороги, левее фургона, ~20 м от дома; 6,8 × 4,8 м, двери к дороге
 
 
 # ---------- Цвета и материалы ----------
@@ -341,7 +341,7 @@ def blocked_for_grass(x, y):
         return True
     if abs(x - CAR_POS[0]) < 2.9 and abs(y - CAR_POS[1]) < 1.1:  # место машины, трава не пробьёт кузов
         return True
-    if -4.0 < x - KTPN_POS[0] < 3.3 and abs(y - KTPN_POS[1]) < 2.8:  # КТПН с открытой дверью
+    if -4.0 < x - KTPN_POS[0] < 3.3 and abs(y - KTPN_POS[1]) < 2.8:  # КТПН
         return True
     return False
 
@@ -802,7 +802,7 @@ def build():
     # Места для объектов, которые добавляются вручную (игра их не использует)
     empty("place_ats", (-8.0, 7.0, 0))
     place_model(VAN_GLB, "van", CAR_POS, math.pi)  # мордой по +X вдоль дороги
-    place_model(KTPN_GLB, "ktpn", KTPN_POS, 0)  # открытыми дверями к дороге
+    place_model(KTPN_GLB, "ktpn", KTPN_POS, 0)  # дверями к дороге
     empty("place_worker", (-1.0, -4.0, 0))
 
     bpy.ops.wm.save_as_mainfile(filepath=OUT_BLEND)
