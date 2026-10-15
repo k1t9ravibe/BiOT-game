@@ -101,7 +101,8 @@ http://localhost:5173/walk: игрок идёт от фургона (точка 
 
 ### Сцена из Blender
 
-- `blender/build_t1.py` собирает сцену скриптом и сохраняет `public/models/t1.glb`, `public/models/worker.glb` (игрок) и `blender/t1_pole.blend`.
+- `blender/build_t1.py` собирает сцену скриптом и сохраняет `public/models/t1.glb` и `blender/t1_pole.blend`.
+- `blender/build_worker.py` собирает персонажа игрока `public/models/worker.glb` из готовой модели `blender/assets/kazakhtelecom_worker_lowpoly.glb`.
 - Пересобрать модели: `npm run models`. Нужен Blender 4.5 LTS в PATH.
 - `t1_pole.blend` можно открыть в Blender и дорабатывать руками. После правок экспортируйте сцену: File → Export → glTF 2.0 (.glb), включите Include → Custom Properties и сохраните как `public/models/t1.glb`.
 

@@ -1,12 +1,12 @@
 """
-Сборка 3D-сцены «Опора у сельской АТС» и модели монтёра для режима ходьбы (/walk).
+Сборка 3D-сцены «Опора у сельской АТС» для режима ходьбы (/walk?scene=t1).
+Персонаж игрока (public/models/worker.glb) собирает blender/build_worker.py из готовой модели.
 
 Запуск (из корня проекта):
     blender --background --python blender/build_t1.py
 
 Результат:
     public/models/t1.glb      — сцена для игры
-    public/models/worker.glb  — персонаж игрока (руки и ноги — отдельные узлы для анимации ходьбы)
     blender/t1_pole.blend     — исходник сцены, можно открыть и доработать в Blender руками
 
 Соглашение об именах объектов (игра читает их из .glb):
@@ -232,16 +232,6 @@ def build_worker(helmet=True):
     return parts
 
 
-def export_worker():
-    reset()
-    materials()
-    parts = build_worker(helmet=True)
-    root = empty("worker", (0, 0, 0))
-    for p in parts.values():
-        p.parent = root
-    bpy.ops.export_scene.gltf(filepath=os.path.join(OUT_MODELS, "worker.glb"), export_format="GLB", export_extras=True)
-
-
 # ---------- Сцена t1 ----------
 
 def build_scene():
@@ -387,6 +377,5 @@ def build_scene():
     bpy.ops.export_scene.gltf(filepath=os.path.join(OUT_MODELS, "t1.glb"), export_format="GLB", export_extras=True)
 
 
-export_worker()
 build_scene()
 print("Готово:", OUT_MODELS, OUT_BLEND)
