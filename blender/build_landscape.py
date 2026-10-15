@@ -1,7 +1,6 @@
 """
-Сельский ландшафт для режима ходьбы: рельеф, грунтовая дорога, трава, дом с двором, заборы, лестница, деревья,
-фургон с логотипом на обочине (логотип рисуется в blender/textures/van_logo.png).
-АТС и людей сюда не ставим: их добавляют вручную в Blender, места помечены пустышками place_*.
+Сельский ландшафт для режима ходьбы: рельеф, грунтовая дорога, трава, дом с двором, заборы, лестница, деревья.
+АТС, машину и людей сюда не ставим: их добавляют вручную в Blender, места помечены пустышками place_*.
 
 Запуск (из корня проекта):
     "C:\\Program Files\\Blender Foundation\\Blender 4.5\\blender.exe" --background --python blender/build_landscape.py
@@ -39,7 +38,7 @@ ROAD_Y = -10      # ось грунтовой дороги (идёт вдоль 
 PATH_X = 10.25    # тропинка от дороги к калитке и крыльцу
 YARD = (3, 0, 19, 15)  # двор: x0, y0, x1, y1
 GATE = (9.5, 11.0)     # проём калитки по X на передней стороне двора
-VAN_POS = (-6.0, ROAD_Y + 3.4)  # фургон стоит на обочине вдоль дороги, мордой по +X
+CAR_POS = (-6.0, ROAD_Y + 3.4)  # место для машины на обочине вдоль дороги (пустышка place_car)
 
 
 # ---------- Цвета и материалы ----------
@@ -336,7 +335,7 @@ def blocked_for_grass(x, y):
         return True
     if 14.3 < x < 18.4 and 0.7 < y < 4.1:   # грядки
         return True
-    if abs(x - VAN_POS[0]) < 2.9 and abs(y - VAN_POS[1]) < 1.1:  # фургон
+    if abs(x - CAR_POS[0]) < 2.9 and abs(y - CAR_POS[1]) < 1.1:  # место машины, трава не пробьёт кузов
         return True
     return False
 
@@ -705,195 +704,6 @@ def build_far_houses():
         mb.build()
 
 
-# ---------- Фургон с логотипом у дороги ----------
-
-VAN_BLUE = "#1D7FC6"
-VAN_WHITE = "#F3F4F5"
-LOGO_PNG = os.path.join(ROOT, "blender", "textures", "van_logo.png")
-
-
-def logo_image():
-    """Логотип с фургона — два шара в полоску. Рисуется в PNG (фон цвета кузова, прозрачный), чтобы попасть в GLB"""
-    import numpy as np
-    W, H, S = 1024, 720, 2  # S — сглаживание: рисуем в S раз крупнее и усредняем
-    ys, xs = np.mgrid[0:H * S, 0:W * S].astype(np.float32) / S
-    x1, y1, r1 = 318, 372, 292   # левый шар, прямые полосы
-    x2, y2, r2 = 672, 350, 300   # правый шар, полосы-дуги
-    d1 = np.hypot(xs - x1, ys - y1)
-    d2 = np.hypot(xs - x2, ys - y2)
-    left = (d1 < r1) & (d2 > r2 + 22) & (((ys - y1 + 10) % 74) > 17)
-    # Дуги правого шара загибаются вниз к левому краю, просветы к низу шире
-    dx = (xs - x2 - 0.30 * r2) / r2
-    gap = 13 + 9 * np.clip((ys - (y2 - r2)) / (2 * r2), 0, 1)
-    right = (d2 < r2) & (((ys - y2 - 0.26 * r2 * dx * dx + 20) % 82) > gap)
-    cov = (left | right).astype(np.float32).reshape(H, S, W, S).mean(axis=(1, 3))[::-1]  # Blender хранит строки снизу вверх
-    bg = np.array([int(VAN_WHITE[i:i + 2], 16) / 255 for i in (1, 3, 5)], np.float32)
-    fg = np.array([int(VAN_BLUE[i:i + 2], 16) / 255 for i in (1, 3, 5)], np.float32)
-    rgba = np.concatenate([bg + (fg - bg) * cov[..., None], cov[..., None]], axis=2)
-    img = bpy.data.images.new("van_logo", W, H, alpha=True)
-    img.pixels.foreach_set(rgba.ravel())
-    os.makedirs(os.path.dirname(LOGO_PNG), exist_ok=True)
-    img.filepath_raw = LOGO_PNG
-    img.file_format = "PNG"
-    img.save()
-    return img
-
-
-def logo_mat(img):
-    """Наклейка: альфа через Round → в glTF выходит alphaMode MASK"""
-    m = bpy.data.materials.new("Логотип")
-    m.use_nodes = True
-    nt = m.node_tree
-    b = principled(nt)
-    tex = nt.nodes.new("ShaderNodeTexImage")
-    tex.image = img
-    rnd = nt.nodes.new("ShaderNodeMath")
-    rnd.operation = "ROUND"
-    nt.links.new(tex.outputs["Color"], b.inputs["Base Color"])
-    nt.links.new(tex.outputs["Alpha"], rnd.inputs[0])
-    nt.links.new(rnd.outputs[0], b.inputs["Alpha"])
-    b.inputs["Roughness"].default_value = 0.35
-    try:
-        m.blend_method = "CLIP"
-    except (AttributeError, TypeError):
-        pass
-    return m
-
-
-def decal(name, center, right, up, w, h, material, parent):
-    """Плоская наклейка w×h; right × up смотрит наружу"""
-    c, r, u = V(center), V(right) * (w / 2), V(up) * (h / 2)
-    me = bpy.data.meshes.new(name)
-    me.from_pydata([c - r - u, c + r - u, c + r + u, c - r + u], [], [(0, 1, 2, 3)])
-    uv = me.uv_layers.new(name="UVMap")
-    for i, p in enumerate([(0, 0), (1, 0), (1, 1), (0, 1)]):
-        uv.data[i].uv = p
-    me.materials.append(material)
-    o = bpy.data.objects.new(name, me)
-    bpy.context.collection.objects.link(o)
-    o.parent = parent
-    return o
-
-
-def plate(mb, pts, n, t, m):
-    """Тонкая пластина по плоскому контуру pts, выдавленная на t вдоль нормали n (стёкла)"""
-    k = len(pts)
-    pts = [V(p) for p in pts]
-    n = V(n).normalized() * t
-    faces = [tuple(range(k)), tuple(range(k, 2 * k))] + [(i, (i + 1) % k, k + (i + 1) % k, k + i) for i in range(k)]
-    mb.poly(pts + [p + n for p in pts], faces, m)
-
-
-def build_van(loc, rz):
-    """Цельнометаллический фургон с высокой крышей (как Foton Toano): длина 5,5 м, ширина 2 м, высота 2,6 м.
-    Локальные оси: +X — вперёд, +Y — левый борт, Z — вверх"""
-    body = mat("Кузов", VAN_WHITE, rough=0.35)
-    black = mat("Чёрный пластик", "#1C1D1F", rough=0.6)
-    arch = mat("Подкрылки", "#2A2B2D", rough=0.9)
-    glass = mat("Стекло фургона", "#1E2A36", rough=0.1)
-    tire = mat("Шины", "#18191A", rough=0.9)
-    rim = mat("Диски", "#B9BDC2", rough=0.35, metal=0.8)
-    red = mat("Стоп-сигналы", "#C61E1E", rough=0.3)
-    lamp = mat("Фары", "#DCE6EE", rough=0.1, metal=0.5)
-    seam = mat("Швы кузова", "#9EA2A6", rough=0.6)
-
-    root = empty("van", loc)
-    root.rotation_euler = (0, 0, rz)
-
-    # Кузов: боковой профиль (x, z) против часовой стрелки, с вырезами под колёса, выдавленный по ширине
-    WHEEL_X, WHEEL_R, ARCH_R, FLOOR = 1.75, 0.36, 0.46, 0.38
-    prof, edge_m = [(-2.70, FLOOR)], []
-    for c in (-WHEEL_X, WHEEL_X):
-        prof.append((c - ARCH_R, FLOOR))
-        for k in range(1, 12):
-            a = math.pi * (1 - k / 12)
-            prof.append((c + ARCH_R * math.cos(a), FLOOR + ARCH_R * math.sin(a)))
-            edge_m.append(arch)
-        prof.append((c + ARCH_R, FLOOR))
-        edge_m.append(arch)
-    edge_m.insert(0, arch)  # днище сзади
-    edge_m.insert(13, arch)  # днище между колёсами
-    # Морда: округлый бампер, покатый капот, скруглённый переход лобового стекла в крышу
-    rest = [(2.64, FLOOR), (2.76, 0.50), (2.79, 0.70), (2.77, 0.88), (2.70, 0.99), (2.55, 1.08), (2.30, 1.19),
-            (2.05, 1.30), (1.35, 2.10), (1.20, 2.34), (1.04, 2.50), (0.85, 2.60), (0.62, 2.635),
-            (-2.62, 2.635), (-2.70, 2.56)]
-    prof += rest
-    edge_m += [arch] + [body] * len(rest)  # последнее ребро замыкает контур: зад
-
-    def hw(x, z):
-        """Полуширина: к крыше борта заваливаются внутрь, к носу кузов сужается — скруглённые углы морды"""
-        t = smooth(2.2, 2.79, x)
-        return 1.0 - 0.08 * smooth(2.25, 2.635, z) - 0.14 * t * t
-
-    mb = MB("van_body")
-    n = len(prof)
-    pts = [(x, -hw(x, z), z) for x, z in prof] + [(x, hw(x, z), z) for x, z in prof]
-    faces = [tuple(range(n)), tuple(range(n, 2 * n))]
-    faces += [(i, (i + 1) % n, n + (i + 1) % n, n + i) for i in range(n)]
-    base = len(mb.v)
-    mb.v += pts
-    mb.c += [None] * len(pts)
-    for f, m in zip(faces, [body, body] + edge_m):
-        mb.f.append(tuple(base + i for i in f))
-        mb.fm.append(mb._mi(m))
-
-    # Лобовое стекло и стёкла кабины
-    A, B = V((2.05, 0, 1.30)), V((1.35, 0, 2.10))
-    nw = V((0.8, 0, 0.7)).normalized()
-    p = lambda t, y: A + (B - A) * t + V((0, y, 0)) + nw * 0.004
-    plate(mb, [p(0.06, -0.9), p(0.06, 0.9), p(0.94, 0.9), p(0.94, -0.9)], nw, 0.01, glass)
-    for s in (-1, 1):
-        y = s * 1.004
-        plate(mb, [(0.95, y, 1.40), (1.86, y, 1.40), (1.30, y, 2.05), (0.95, y, 2.05)], (0, s, 0), 0.01, glass)
-        # Швы дверей, ручки, зеркало
-        for x, z0, z1 in ((0.92, 0.45, 2.15), (-1.68, 0.88, 2.20)):
-            mb.box((x, s * 1.003, (z0 + z1) / 2), (0.02, 0.01, z1 - z0), seam)
-        for x in (1.05, 0.70):
-            mb.box((x, s * 1.015, 1.25), (0.18, 0.03, 0.045), black)
-        mb.beam((1.92, s * 0.98, 1.45), (1.97, s * 1.16, 1.50), 0.05, 0.05, black)
-        mb.box((1.97, s * 1.20, 1.58), (0.07, 0.13, 0.28), black)
-        # Чёрный молдинг по борту (не заходит на арки)
-        for x0, x1 in ((-2.72, -2.15), (-1.35, 1.35), (2.15, 2.40)):
-            mb.box(((x0 + x1) / 2, s * 1.012, 0.70), (x1 - x0, 0.03, 0.12), black)
-        # Фара лежит на скосе морды, задний фонарь — вертикальный
-        nf = V((0.75, 0, 0.66)).normalized()
-        plate(mb, [V(q) - nf * 0.02 for q in ((2.79, s * 0.44, 0.84), (2.79, s * 0.83, 0.84),
-                                               (2.585, s * 0.81, 1.08), (2.585, s * 0.44, 1.08))], nf, 0.045, black)
-        plate(mb, [V(q) for q in ((2.77, s * 0.48, 0.875), (2.77, s * 0.79, 0.875),
-                                  (2.61, s * 0.77, 1.05), (2.61, s * 0.48, 1.05))], nf, 0.04, lamp)
-        mb.box((-2.715, s * 0.90, 1.12), (0.04, 0.17, 0.58), red)
-        mb.box((-2.725, s * 0.90, 0.96), (0.03, 0.12, 0.12), lamp)
-
-    # Перед и зад: бамперы, решётка, номер, шов задних дверей, верхний стоп-сигнал
-    mb.box((2.74, 0, 0.49), (0.14, 1.84, 0.24), black)
-    for s in (-1, 1):  # углы бампера заходят на борта
-        mb.box((2.52, s * 0.95, 0.49), (0.36, 0.10, 0.24), black, rz=s * rad(-14))
-    mb.box((2.775, 0, 0.71), (0.06, 1.0, 0.22), black)
-    mb.box((2.80, 0, 0.71), (0.02, 0.9, 0.035), mat("Хром", "#C9CDD2", rough=0.25, metal=0.9))
-    mb.box((-2.73, 0, 0.50), (0.16, 2.02, 0.24), black)
-    mb.box((-2.815, 0, 0.55), (0.02, 0.52, 0.11), lamp)
-    mb.box((-2.703, 0, 1.50), (0.01, 0.02, 2.0), seam)
-    mb.box((-2.715, -0.20, 1.15), (0.03, 0.16, 0.045), black)
-    mb.box((-2.71, 0, 2.50), (0.03, 0.40, 0.05), red)
-    body_obj = mb.build(solid=True)
-    body_obj.parent = root
-
-    # Колёса
-    wb = MB("van_wheels")
-    for x in (-WHEEL_X, WHEEL_X):
-        for s in (-1, 1):
-            wb.cyl((x, s * 0.78, WHEEL_R), (x, s * 1.0, WHEEL_R), WHEEL_R, WHEEL_R, tire, n=20)
-            wb.cyl((x, s * 0.99, WHEEL_R), (x, s * 1.005, WHEEL_R), 0.22, 0.22, rim, n=20)
-            wb.cyl((x, s * 1.0, WHEEL_R), (x, s * 1.03, WHEEL_R), 0.07, 0.06, rim, n=10)
-    wb.build().parent = root
-
-    # Логотип: крупно на бортах, поменьше на левой задней двери
-    lm = logo_mat(logo_image())
-    decal("van_logo_left", (-0.60, 1.012, 1.52), (-1, 0, 0), (0, 0, 1), 1.99, 1.40, lm, root)
-    decal("van_logo_right", (-0.60, -1.012, 1.52), (1, 0, 0), (0, 0, 1), 1.99, 1.40, lm, root)
-    decal("van_logo_rear", (-2.712, 0.47, 1.85), (0, -1, 0), (0, 0, 1), 0.80, 0.5625, lm, root)
-
-
 # ---------- Сборка ----------
 
 def build():
@@ -910,13 +720,13 @@ def build():
     build_fences()
     build_trees()
     build_far_houses()
-    build_van((*VAN_POS, 0), 0)
 
     # Точки маршрута: старт на дороге, финиш у калитки
     empty("spawn_A", (-2.0, ROAD_Y, 0))
     empty("goal_B", (PATH_X, -1.2, 0))
     # Места для объектов, которые добавляются вручную (игра их не использует)
     empty("place_ats", (-8.0, 7.0, 0))
+    empty("place_car", (*CAR_POS, 0))
     empty("place_worker", (-1.0, -4.0, 0))
 
     bpy.ops.wm.save_as_mainfile(filepath=OUT_BLEND)
