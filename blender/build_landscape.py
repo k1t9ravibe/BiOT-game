@@ -1,6 +1,7 @@
 """
 Сельский ландшафт для режима ходьбы: рельеф, грунтовая дорога, трава, дом с двором, заборы, лестница, деревья.
-АТС, машину и людей сюда не ставим: их добавляют вручную в Blender, места помечены пустышками place_*.
+Фургон берётся готовым из blender/assets/kazakhtelecom_white_van.glb.
+АТС и людей сюда не ставим: их добавляют вручную в Blender, места помечены пустышками place_*.
 
 Запуск (из корня проекта):
     "C:\\Program Files\\Blender Foundation\\Blender 4.5\\blender.exe" --background --python blender/build_landscape.py
@@ -27,6 +28,7 @@ from mathutils import noise
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 OUT_GLB = os.path.join(ROOT, "public", "models", "landscape.glb")
 OUT_BLEND = os.path.join(ROOT, "blender", "landscape_base.blend")
+VAN_GLB = os.path.join(ROOT, "blender", "assets", "kazakhtelecom_white_van.glb")
 
 random.seed(7)
 rad = math.radians
@@ -38,7 +40,7 @@ ROAD_Y = -10      # ось грунтовой дороги (идёт вдоль 
 PATH_X = 10.25    # тропинка от дороги к калитке и крыльцу
 YARD = (3, 0, 19, 15)  # двор: x0, y0, x1, y1
 GATE = (9.5, 11.0)     # проём калитки по X на передней стороне двора
-CAR_POS = (-6.0, ROAD_Y + 3.4)  # место для машины на обочине вдоль дороги (пустышка place_car)
+CAR_POS = (-6.0, ROAD_Y + 3.4)  # фургон на обочине вдоль дороги
 
 
 # ---------- Цвета и материалы ----------
@@ -704,6 +706,27 @@ def build_far_houses():
         mb.build()
 
 
+# ---------- Готовая модель фургона ----------
+
+def place_van():
+    """Ставит blender/assets/kazakhtelecom_white_van.glb на обочину вместо пустышки place_car.
+    Файл сохранён с осью Z вверх (а glTF ждёт Y) и колёсами на 0,36 м над землёй — поправляем поворотом и сдвигом"""
+    before = set(bpy.data.objects)
+    bpy.ops.import_scene.gltf(filepath=VAN_GLB)
+    new = [o for o in bpy.data.objects if o not in before]
+    root = empty("van", (*CAR_POS, -0.36))
+    root.rotation_euler = (rad(-90), 0, math.pi)  # встаёт на колёса и смотрит мордой по +X
+    root["solid"] = 1  # препятствие по габаритам всего фургона
+    for o in new:
+        if o.parent is None:
+            o.parent = root
+    # На правом борту (по файлу +Y) логотип в файле отзеркален
+    logo = bpy.data.objects.get("Kazakhtelecom_logo_right")
+    if logo:
+        for l in logo.data.uv_layers.active.data:
+            l.uv.x = 1 - l.uv.x
+
+
 # ---------- Сборка ----------
 
 def build():
@@ -726,7 +749,7 @@ def build():
     empty("goal_B", (PATH_X, -1.2, 0))
     # Места для объектов, которые добавляются вручную (игра их не использует)
     empty("place_ats", (-8.0, 7.0, 0))
-    empty("place_car", (*CAR_POS, 0))
+    place_van()
     empty("place_worker", (-1.0, -4.0, 0))
 
     bpy.ops.wm.save_as_mainfile(filepath=OUT_BLEND)
