@@ -1,6 +1,6 @@
 """
 Сельский ландшафт для режима ходьбы: рельеф, грунтовая дорога, трава, дом с двором, заборы, лестница, деревья.
-Фургон и КТПН берутся готовыми из blender/assets (kazakhtelecom_faceted_van.glb, kazakhtelecom_substation_solid_no_smoke.glb).
+Фургон и КТПН берутся готовыми из blender/assets (kazakhtelecom_faceted_van.glb, kazakhtelecom_substation_no_signs.glb).
 АТС и людей сюда не ставим: их добавляют вручную в Blender, места помечены пустышками place_*.
 
 Запуск (из корня проекта):
@@ -22,6 +22,7 @@ import random
 
 import bmesh
 import bpy
+from mathutils import Matrix
 from mathutils import Vector as V
 from mathutils import noise
 
@@ -29,7 +30,8 @@ ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 OUT_GLB = os.path.join(ROOT, "public", "models", "landscape.glb")
 OUT_BLEND = os.path.join(ROOT, "blender", "landscape_base.blend")
 VAN_GLB = os.path.join(ROOT, "blender", "assets", "kazakhtelecom_faceted_van.glb")
-KTPN_GLB = os.path.join(ROOT, "blender", "assets", "kazakhtelecom_substation_solid_no_smoke.glb")
+KTPN_GLB = os.path.join(ROOT, "blender", "assets", "kazakhtelecom_substation_no_signs.glb")
+WORKER_GLB = os.path.join(ROOT, "blender", "assets", "kazakhtelecom_worker_rounded_realistic.glb")
 
 random.seed(7)
 rad = math.radians
@@ -753,30 +755,59 @@ def fit_decal_aspect(o):
             v.co[up] = mid[up] + (v.co[up] - mid[up]) / k
 
 
-def place_model(path, name, pos, rz):
-    """Ставит готовую модель из blender/assets на землю в точку pos, повернув на rz вокруг вертикали.
-    Файлы этих моделей сохранены с осью Z вверх (а glTF ждёт Y), низ не всегда на нуле, логотипы бывают
-    зеркальными или растянутыми — всё поправляется здесь. Модель целиком — препятствие (solid).
-    При rz = 0 сторона модели, которая в файле смотрит на −Y, смотрит на −Y сцены (к дороге)"""
+def place_model(path, name, pos, rz, scale=1.0, base_z=0.0, solid=True, fit_logos=True, smooth=False, drop=()):
+    """Ставит готовую модель из blender/assets нижней точкой на высоту base_z в точку pos, повернув на rz
+    вокруг вертикали. Файлы этих моделей сохранены с осью Z вверх (а glTF ждёт Y), низ не всегда на нуле,
+    логотипы бывают зеркальными или растянутыми — всё поправляется здесь. solid — модель целиком препятствие.
+    При rz = 0 сторона модели, которая в файле смотрит на −Y, смотрит на −Y сцены (к дороге).
+    drop — имена деталей, которые надо убрать; smooth — гладкое затенение (иначе экспорт раздувает файл)"""
     before = set(bpy.data.objects)
     bpy.ops.import_scene.gltf(filepath=path)
     new = [o for o in bpy.data.objects if o not in before]
+    for o in [o for o in new if o.name in drop]:
+        new.remove(o)
+        bpy.data.objects.remove(o)
     root = empty(name, (*pos, 0))
     root.rotation_euler = (rad(-90), 0, rz)  # сначала встаёт вертикально, потом поворачивается
-    root["solid"] = 1
+    root.scale = (scale,) * 3
+    if solid:
+        root["solid"] = 1
     for o in new:
         if o.parent is None:
             o.parent = root
     bpy.context.view_layer.update()
     meshes = [o for o in new if o.type == "MESH"]
-    # Самая нижняя точка модели — на землю
-    root.location.z -= min((o.matrix_world @ v.co).z for o in meshes for v in o.data.vertices)
+    root.location.z += base_z - min((o.matrix_world @ v.co).z for o in meshes for v in o.data.vertices)
     bpy.context.view_layer.update()
     center = root.matrix_world.translation
     for o in meshes:
         if "logo" in o.name.lower() and o.data.uv_layers:
-            fit_decal_aspect(o)
+            if fit_logos:
+                fit_decal_aspect(o)
             unmirror_decal(o, center)
+        if smooth:
+            o.data.polygons.foreach_set("use_smooth", [True] * len(o.data.polygons))
+            o.data.set_sharp_from_angle(angle=rad(40))
+    return meshes
+
+
+def place_busy_worker():
+    """Монтёр без каски в левом отсеке КТПН: стоит лицом к шкафу управления, руки подняты к нему.
+    Модель та же, что у игрока (рост такой же: в build_worker.py 1,9 м до верха каски)"""
+    rz = math.pi  # лицом к задней стене КТПН (+Y)
+    meshes = place_model(WORKER_GLB, "npc_worker_no_helmet", (KTPN_POS[0] - 1.9, KTPN_POS[1] + 0.3), rz,
+                         scale=1.9 / 2.64, base_z=0.2,  # 0,2 м — стальной пол КТПН
+                         solid=False, fit_logos=False, smooth=True,
+                         drop=("hard_hat_dome", "helmet_brim", "helmet_front_rim"))
+    forward = V((math.sin(rz), -math.cos(rz), 0))
+    axis = forward.cross(V((0, 0, 1)))  # поворот вокруг этой оси поднимает руку вперёд
+    for side, angle in (("1", 70), ("-1", 50)):
+        arm = [o for o in meshes if o.name in (f"upper_sleeve{side}", f"lower_sleeve{side}", f"hand{side}")]
+        pts = [o.matrix_world @ v.co for o in arm if o.name.startswith("upper") for v in o.data.vertices]
+        pivot = V((sum(p.x for p in pts) / len(pts), sum(p.y for p in pts) / len(pts), max(p.z for p in pts) - 0.03))
+        m = Matrix.Translation(pivot) @ Matrix.Rotation(rad(angle), 4, axis) @ Matrix.Translation(-pivot)
+        for o in arm:
+            o.matrix_world = m @ o.matrix_world
 
 
 # ---------- Сборка ----------
@@ -803,6 +834,7 @@ def build():
     empty("place_ats", (-8.0, 7.0, 0))
     place_model(VAN_GLB, "van", CAR_POS, math.pi)  # мордой по +X вдоль дороги
     place_model(KTPN_GLB, "ktpn", KTPN_POS, 0)  # дверями к дороге
+    place_busy_worker()
     empty("place_worker", (-1.0, -4.0, 0))
 
     bpy.ops.wm.save_as_mainfile(filepath=OUT_BLEND)
