@@ -1,6 +1,6 @@
 """
 Сельский ландшафт для режима ходьбы: рельеф, грунтовая дорога, трава, дом с двором, заборы, лестница, деревья.
-Фургон берётся готовым из blender/assets/kazakhtelecom_faceted_van.glb.
+Фургон и КТПН берутся готовыми из blender/assets (kazakhtelecom_faceted_van.glb, kazakhtelecom_substation_open_smoke.glb).
 АТС и людей сюда не ставим: их добавляют вручную в Blender, места помечены пустышками place_*.
 
 Запуск (из корня проекта):
@@ -29,6 +29,7 @@ ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 OUT_GLB = os.path.join(ROOT, "public", "models", "landscape.glb")
 OUT_BLEND = os.path.join(ROOT, "blender", "landscape_base.blend")
 VAN_GLB = os.path.join(ROOT, "blender", "assets", "kazakhtelecom_faceted_van.glb")
+KTPN_GLB = os.path.join(ROOT, "blender", "assets", "kazakhtelecom_substation_open_smoke.glb")
 
 random.seed(7)
 rad = math.radians
@@ -41,6 +42,7 @@ PATH_X = 10.25    # тропинка от дороги к калитке и кр
 YARD = (3, 0, 19, 15)  # двор: x0, y0, x1, y1
 GATE = (9.5, 11.0)     # проём калитки по X на передней стороне двора
 CAR_POS = (-6.0, ROAD_Y + 3.4)  # фургон на обочине вдоль дороги
+KTPN_POS = (-1.4, 6.0)  # КТПН слева от двора (забор на x = 3), 6,8 × 4,8 м
 
 
 # ---------- Цвета и материалы ----------
@@ -338,6 +340,8 @@ def blocked_for_grass(x, y):
     if 14.3 < x < 18.4 and 0.7 < y < 4.1:   # грядки
         return True
     if abs(x - CAR_POS[0]) < 2.9 and abs(y - CAR_POS[1]) < 1.1:  # место машины, трава не пробьёт кузов
+        return True
+    if -4.0 < x - KTPN_POS[0] < 3.3 and abs(y - KTPN_POS[1]) < 2.8:  # КТПН с открытой дверью
         return True
     return False
 
@@ -706,7 +710,7 @@ def build_far_houses():
         mb.build()
 
 
-# ---------- Готовая модель фургона ----------
+# ---------- Готовые модели: фургон, КТПН ----------
 
 def unmirror_decal(o, center):
     """Если наклейка читается зеркально для зрителя снаружи, переворачивает её UV по горизонтали"""
@@ -749,22 +753,23 @@ def fit_decal_aspect(o):
             v.co[up] = mid[up] + (v.co[up] - mid[up]) / k
 
 
-def place_van():
-    """Ставит blender/assets/kazakhtelecom_faceted_van.glb на обочину вместо пустышки place_car.
-    Файлы этих моделей сохранены с осью Z вверх (а glTF ждёт Y), мордой по −X, колёса не на нуле,
-    логотип на одном борту зеркальный — всё поправляется здесь, под любую из них"""
+def place_model(path, name, pos, rz):
+    """Ставит готовую модель из blender/assets на землю в точку pos, повернув на rz вокруг вертикали.
+    Файлы этих моделей сохранены с осью Z вверх (а glTF ждёт Y), низ не всегда на нуле, логотипы бывают
+    зеркальными или растянутыми — всё поправляется здесь. Модель целиком — препятствие (solid).
+    При rz = 0 сторона модели, которая в файле смотрит на −Y, смотрит на −Y сцены (к дороге)"""
     before = set(bpy.data.objects)
-    bpy.ops.import_scene.gltf(filepath=VAN_GLB)
+    bpy.ops.import_scene.gltf(filepath=path)
     new = [o for o in bpy.data.objects if o not in before]
-    root = empty("van", (*CAR_POS, 0))
-    root.rotation_euler = (rad(-90), 0, math.pi)  # встаёт на колёса и смотрит мордой по +X
-    root["solid"] = 1  # препятствие по габаритам всего фургона
+    root = empty(name, (*pos, 0))
+    root.rotation_euler = (rad(-90), 0, rz)  # сначала встаёт вертикально, потом поворачивается
+    root["solid"] = 1
     for o in new:
         if o.parent is None:
             o.parent = root
     bpy.context.view_layer.update()
     meshes = [o for o in new if o.type == "MESH"]
-    # Опускаем на колёса: самая нижняя точка модели — на землю
+    # Самая нижняя точка модели — на землю
     root.location.z -= min((o.matrix_world @ v.co).z for o in meshes for v in o.data.vertices)
     bpy.context.view_layer.update()
     center = root.matrix_world.translation
@@ -796,7 +801,8 @@ def build():
     empty("goal_B", (PATH_X, -1.2, 0))
     # Места для объектов, которые добавляются вручную (игра их не использует)
     empty("place_ats", (-8.0, 7.0, 0))
-    place_van()
+    place_model(VAN_GLB, "van", CAR_POS, math.pi)  # мордой по +X вдоль дороги
+    place_model(KTPN_GLB, "ktpn", KTPN_POS, 0)  # открытыми дверями к дороге
     empty("place_worker", (-1.0, -4.0, 0))
 
     bpy.ops.wm.save_as_mainfile(filepath=OUT_BLEND)
