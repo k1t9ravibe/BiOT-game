@@ -125,6 +125,12 @@ export class WalkEngine {
     this.resize()
     this.bindInput()
     this.load(sceneUrl, workerUrl)
+    // Только в режиме разработки: для автотестов — перенести игрока в точку (x, z) без ходьбы
+    if (import.meta.env.DEV) {
+      ;(window as unknown as { __walk?: unknown }).__walk = {
+        teleport: (x: number, z: number) => this.player.position.set(x, 0, z),
+      }
+    }
   }
 
   private async load(sceneUrl: string, workerUrl: string) {

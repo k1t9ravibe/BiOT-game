@@ -764,7 +764,7 @@ def build_manhole_work():
 
     # Второй монтёр за ограждением с газоанализатором: лицом к колодцу (−X), в перчатках
     rz = -math.pi / 2
-    name = "worker_gas"
+    name = "item_gas-detected"  # карточка «прибор показывает газ» откроется только после взгляда по Q
     gx = cx + F + 0.45
     meshes = place_model(WORKER_GLB, name, (gx, cy), rz, scale=scale, solid=True, smooth=True, inspect=1.5)
     h1 = raise_arm(meshes, "1", 48, rz)

@@ -29,8 +29,9 @@ interface SceneConfig {
   options?: WalkOptions
   /** Сцена закрыта, пока не пройдена предыдущая */
   locked?: () => boolean
-  /** Взгляд от первого лица по кнопке Q: id (свойство look в сцене) → подпись рядом и заголовок окна */
-  looks?: Record<string, { near: string; title: string }>
+  /** Взгляд от первого лица по кнопке Q: id (свойство look в сцене) → подпись рядом и заголовок окна;
+   *  reveals — карточки, которые можно отметить только после этого взгляда */
+  looks?: Record<string, { near: string; title: string; reveals?: string[] }>
 }
 
 const SCENES: Record<string, SceneConfig> = {
@@ -44,7 +45,7 @@ const SCENES: Record<string, SceneConfig> = {
     title: 'Колодец у городской улицы',
     route: 'Дойдите от точки A до открытого колодца (B).',
     options: { fog: [60, 260], far: 700, sunFollow: true, ambient: cityAmbient, povRig: () => gasAnalyzerRig() },
-    looks: { gas: { near: 'Газоанализатор у монтёра', title: 'Газоанализатор — глазами монтёра' } },
+    looks: { gas: { near: 'Газоанализатор у монтёра', title: 'Газоанализатор — глазами монтёра', reveals: ['gas-detected'] } },
     locked: () => !isCityUnlocked(),
   },
   t1: { tasksUrl: config.tasksUrl, taskId: 't1', title: 'Опора у сельской АТС', route: 'Дойдите от фургона (A) до опоры (B).' },
@@ -56,6 +57,7 @@ const SCENE_NAME = IS_CITY ? 'city' : PARAMS.get('scene')?.replace(/[^\w-]/g, ''
 const SCENE = SCENES[SCENE_NAME] ?? SCENES.landscape
 const SCENE_URL = `/models/${SCENE_NAME}.glb`
 const WORKER_URL = '/models/worker.glb'
+const HIDDEN_UNTIL_LOOK = Object.values(SCENE.looks ?? {}).flatMap((l) => l.reveals ?? [])
 /** На каком расстоянии от B можно завершить осмотр */
 const GOAL_RADIUS = 2
 
@@ -92,7 +94,10 @@ function WalkGame() {
   const engineRef = useRef<WalkEngine | null>(null)
   const [task, setTask] = useState<Task | null>(null)
   const [status, setStatus] = useState<'loading' | 'ready' | string>('loading')
-  const [near, setNear] = useState<string[]>([])
+  const [nearAll, setNear] = useState<string[]>([])
+  /** Карточки, которые открываются только после взгляда от первого лица, и те, что уже открыты */
+  const [revealed, setRevealed] = useState<string[]>([])
+  const near = nearAll.filter((id) => !HIDDEN_UNTIL_LOOK.includes(id) || revealed.includes(id))
   const [marked, setMarked] = useState<string[]>([])
   const [distB, setDistB] = useState<number | null>(null)
   const [result, setResult] = useState<TaskResult | null>(null)
@@ -166,6 +171,11 @@ function WalkGame() {
 
   useEffect(() => engineRef.current?.setMarked(marked), [marked])
   useEffect(() => engineRef.current?.setPaused(!started || !!result || !!pov), [started, result, pov])
+  // Посмотрел от первого лица — открылись карточки этого взгляда (например, «прибор показывает газ»)
+  useEffect(() => {
+    const ids = (pov && SCENE.looks?.[pov]?.reveals) || []
+    if (ids.length) setRevealed((r) => [...new Set([...r, ...ids])])
+  }, [pov])
   // Окно «от первого лица»: движок рисует вид камеры работника в прямоугольнике povRef; Esc закрывает
   useEffect(() => {
     engineRef.current?.setPov(pov, povRef.current)
