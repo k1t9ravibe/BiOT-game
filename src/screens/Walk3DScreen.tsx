@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Flag, Info, Search, X } from 'lucide-react'
+import { Building2, Flag, Info, Search, X } from 'lucide-react'
 import { config } from '../config'
 import { Header } from '../components/Header'
 import { ListCards } from '../components/ListCards'
 import { ReviewList } from '../components/ReviewList'
+import { saveLoc1Result } from '../lib/progress'
 import { scoreTask } from '../lib/scoring'
 import { WalkEngine } from '../walk/engine'
 import type { Task, TaskResult } from '../types'
@@ -106,7 +107,15 @@ export default function Walk3DScreen() {
       return a
     })
 
-  const finish = () => task && setResult(scoreTask(task, marked, Math.round((Date.now() - startedAt.current) / 1000), false))
+  /** Итог в процентах и открыт ли город (только для локации 1) */
+  const [outcome, setOutcome] = useState<{ percent: number; cityOpen: boolean } | null>(null)
+  const finish = () => {
+    if (!task) return
+    const r = scoreTask(task, marked, Math.round((Date.now() - startedAt.current) / 1000), false)
+    const percent = r.maxScore ? Math.round((r.score / r.maxScore) * 100) : 0
+    setOutcome({ percent, cityOpen: SCENE.number === 1 && saveLoc1Result(percent) })
+    setResult(r)
+  }
 
   const itemText = (id: string) => task?.items.find((i) => i.id === id)?.text ?? id
   const atGoal = distB !== null && distB <= GOAL_RADIUS
@@ -226,6 +235,23 @@ export default function Walk3DScreen() {
           <div className="absolute inset-0 z-20 flex items-center justify-center bg-navy/60 p-3">
             <div className="flex max-h-full w-full max-w-lg flex-col rounded-2xl bg-white shadow-2xl">
               <h2 className="px-5 pb-2 pt-5 text-lg font-bold text-navy">Разбор: {task.title}</h2>
+              {outcome && (
+                <div className="px-5 pb-3">
+                  <div className="text-sm text-muted">
+                    Результат: <b className={outcome.percent >= config.passThresholdPercent ? 'text-ok' : 'text-bad'}>{outcome.percent}%</b> · порог допуска {config.passThresholdPercent}%
+                  </div>
+                  {SCENE.number === 1 &&
+                    (outcome.cityOpen ? (
+                      <div className="mt-2 flex items-center gap-2 rounded-lg bg-ok/10 px-3 py-2 text-sm font-semibold text-ok">
+                        <Building2 className="h-4 w-4 shrink-0" /> Открыта локация 2 «Город»
+                      </div>
+                    ) : (
+                      <div className="mt-2 rounded-lg bg-page px-3 py-2 text-sm text-muted">
+                        Локация 2 «Город» откроется, когда результат будет не ниже {config.passThresholdPercent}%.
+                      </div>
+                    ))}
+                </div>
+              )}
               <div className="thin-scroll min-h-0 flex-1 overflow-y-auto px-5 pb-3">
                 <ReviewList task={task} img={undefined} result={result} hoveredId={null} onHover={() => {}} />
               </div>
@@ -233,9 +259,15 @@ export default function Walk3DScreen() {
                 <button onClick={() => location.reload()} className="rounded-[10px] border-2 border-action py-2.5 font-semibold text-action">
                   Ещё раз
                 </button>
-                <a href="/" className="rounded-[10px] bg-action py-2.5 text-center font-semibold text-white">
-                  В тренажёр
-                </a>
+                {outcome?.cityOpen ? (
+                  <a href="/city" className="rounded-[10px] bg-action py-2.5 text-center font-semibold text-white">
+                    Перейти в «Город»
+                  </a>
+                ) : (
+                  <a href="/" className="rounded-[10px] bg-action py-2.5 text-center font-semibold text-white">
+                    В тренажёр
+                  </a>
+                )}
               </div>
             </div>
           </div>

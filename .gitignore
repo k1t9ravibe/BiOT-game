@@ -4,3 +4,7 @@ dist
 *.log
 .DS_Store
 .vercel
+
+# Blender: резервные копии и кэш Python
+*.blend1
+__pycache__
