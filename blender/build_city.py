@@ -14,6 +14,7 @@
 
 Имена, которые читает игра (src/walk/engine.ts — как в сцене 1):
     item_<id>[+<id2>] — объект задания «city» в public/walk-tasks.json, wall_* / solid — препятствие
+    свойство look = "<id>" + пустышки pov_<id>, pov_<id>_target — взгляд от первого лица по кнопке Q
     spawn_A, goal_B   — старт и финиш; walk_min / walk_max — углы зоны, где можно ходить
 И «живая улица» (src/city/ambient.ts):
     win_<...>       — окна, которые поблёскивают
@@ -690,17 +691,19 @@ def build_backdrop():
 
 def build_manhole_work():
     """Открытый колодец кабельной канализации на газоне у тротуара. Один монтёр спускается по лестнице,
-    второй стоит у края с газоанализатором, пробоотборник опущен в колодец. Объекты item_* — карточки
-    задания «city» в public/walk-tasks.json"""
+    второй стоит у края с газоанализатором, пробоотборник опущен в колодец. Нарушения задания «city»
+    (public/walk-tasks.json) пишутся заново — когда появятся, нужные объекты станут item_<id>.
+    У монтёра с газоанализатором свойство look = "gas": по кнопке Q игра показывает его глазами
+    прибор в руках (src/city/gasAnalyzer.ts) — камера в pov_gas, взгляд на pov_gas_target"""
     cx, cy = MANHOLE
     c = V((cx, cy, 0))
-    INSPECT = 4.5  # объекты у люка видны карточками уже с края круга точки B
+    INSPECT = 4.5  # с какого расстояния доступен взгляд от первого лица (Q) — уже с края круга точки B
     iron = mat("Чугун", "#3B3A38", rough=0.6, metal=0.4)
     hole = mat("Проём колодца", "#0B0C0D", rough=1.0)
     ladder = mat("Лестница колодца", "#9EA4AA", rough=0.4, metal=0.7)
 
     # Колодец: горловина, тёмный проём, лестница, отложенная крышка
-    mb = MB("item_unfenced")
+    mb = MB("manhole")
     for k in range(16):  # кольцо из сегментов, чтобы проём остался открытым
         a = 2 * math.pi * (k + 0.5) / 16
         mb.box(c + V((math.cos(a) * 0.58, math.sin(a) * 0.58, 0.04)), (0.16, 0.25, 0.12), M["concrete"], rz=a)
@@ -713,19 +716,19 @@ def build_manhole_work():
     mb.cyl(lid, lid + V((0, 0, 0.05)), 0.55, 0.55, iron, n=20)
     for rz in (0.4, 0.4 + math.pi / 2):
         mb.box(lid + V((0, 0, 0.06)), (0.9, 0.05, 0.025), iron, rz=rz)
-    mb.build(solid=True)["inspect_range"] = INSPECT
+    mb.build(solid=True)
 
     # Монтёр спускается: по грудь в колодце, лицом к лестнице, держится за поручни; каски нет
     scale = 1.9 / 2.64  # рост как у игрока (build_worker.py)
-    meshes = place_model(WORKER_GLB, "item_no-harness+no-helmet", (cx, cy + 0.12), 0, scale=scale, base_z=-1.0,
-                         solid=False, smooth=True, inspect=INSPECT,
+    meshes = place_model(WORKER_GLB, "worker_descending", (cx, cy + 0.12), 0, scale=scale, base_z=-1.0,
+                         solid=False, smooth=True,
                          drop=("hard_hat_dome", "helmet_brim", "helmet_front_rim"))
     raise_arm(meshes, "1", 112, 0)
     raise_arm(meshes, "-1", 98, 0)
 
     # Второй монтёр у края с газоанализатором: лицом к колодцу (−X), обе руки держат прибор
     rz = -math.pi / 2
-    name = "item_gas-check-ok+workwear-ok"
+    name = "worker_gas"
     meshes = place_model(WORKER_GLB, name, (cx + 1.25, cy), rz, scale=scale, solid=True, smooth=True, inspect=INSPECT)
     h1 = raise_arm(meshes, "1", 48, rz)
     h2 = raise_arm(meshes, "-1", 48, rz)
@@ -738,9 +741,13 @@ def build_manhole_work():
     analyzer.beam(dev + V((0, 0, -0.13)), tip, 0.02, 0.02, M["dark"])  # шланг пробоотборника
     analyzer.beam(tip, c + V((0.1, 0.05, -1.6)), 0.02, 0.02, M["dark"])
     analyzer.build(parent=bpy.data.objects[name])
+    bpy.data.objects[name]["look"] = "gas"
+    # Глаза монтёра (рост 1,9 м, лицом к колодцу) и точка, куда он смотрит: прибор и люк под ним
+    empty("pov_gas", (cx + 1.17, cy, 1.74))
+    empty("pov_gas_target", (cx + 0.35, cy, 0.35))
 
     # Инструмент у самого края люка
-    mb = MB("item_tools-edge")
+    mb = MB("tools_edge")
     t = c + V((0.15, 0.72, 0))
     mb.box(t + V((0, 0, 0.13)), (0.5, 0.24, 0.26), M["red"], rz=0.2)
     mb.box(t + V((0, 0, 0.27)), (0.2, 0.04, 0.03), M["dark"], rz=0.2)
@@ -748,10 +755,10 @@ def build_manhole_work():
     mb.box(t + V((0.45, -0.18, 0.03)), (0.32, 0.04, 0.04), M["wood"], rz=-0.5)     # молоток
     mb.box(t + V((0.58, -0.25, 0.04)), (0.06, 0.14, 0.06), M["metal"], rz=-0.5)
     mb.cyl(t + V((-0.2, 0.35, 0)), t + V((-0.2, 0.35, 0.18)), 0.22, 0.22, M["dark"], n=12)  # бухта кабеля
-    mb.build()["inspect_range"] = INSPECT
+    mb.build()
 
     empty("spawn_A", (20.0, -11.0, 0))  # на газоне: прямой путь до колодца свободен от изгороди и скамеек
-    empty("goal_B", (cx - 2.1, cy, 0))  # у самого люка: отсюда видны карточки всех объектов
+    empty("goal_B", (cx - 2.1, cy, 0))  # у самого люка
     # Где может ходить игрок: ближний тротуар и газон до живой изгороди (на проезжую часть — нельзя)
     empty("walk_min", (8, -15.0, 0))
     empty("walk_max", (170, -3.4, 0))

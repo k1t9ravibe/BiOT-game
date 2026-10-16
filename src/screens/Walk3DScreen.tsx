@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Building2, Flag, Info, Lock, Search, X } from 'lucide-react'
+import { Building2, Eye, Flag, Info, Lock, Search, X } from 'lucide-react'
 import { config } from '../config'
 import { Header } from '../components/Header'
 import { ListCards } from '../components/ListCards'
 import { ReviewList } from '../components/ReviewList'
 import { cityAmbient } from '../city/ambient'
+import { gasAnalyzerRig } from '../city/gasAnalyzer'
 import { isCityUnlocked, saveLoc1Result } from '../lib/progress'
 import { scoreTask } from '../lib/scoring'
 import { WalkEngine, type WalkOptions } from '../walk/engine'
@@ -28,6 +29,8 @@ interface SceneConfig {
   options?: WalkOptions
   /** Сцена закрыта, пока не пройдена предыдущая */
   locked?: () => boolean
+  /** Взгляд от первого лица по кнопке Q: id (свойство look в сцене) → подпись рядом и заголовок окна */
+  looks?: Record<string, { near: string; title: string }>
 }
 
 const SCENES: Record<string, SceneConfig> = {
@@ -40,7 +43,8 @@ const SCENES: Record<string, SceneConfig> = {
     taskId: 'city',
     title: 'Колодец у городской улицы',
     route: 'Дойдите от точки A до открытого колодца (B).',
-    options: { fog: [60, 260], far: 700, sunFollow: true, ambient: cityAmbient },
+    options: { fog: [60, 260], far: 700, sunFollow: true, ambient: cityAmbient, povRig: () => gasAnalyzerRig() },
+    looks: { gas: { near: 'Газоанализатор у монтёра', title: 'Газоанализатор — глазами монтёра' } },
     locked: () => !isCityUnlocked(),
   },
   t1: { tasksUrl: config.tasksUrl, taskId: 't1', title: 'Опора у сельской АТС', route: 'Дойдите от фургона (A) до опоры (B).' },
@@ -93,11 +97,19 @@ function WalkGame() {
   const [distB, setDistB] = useState<number | null>(null)
   const [result, setResult] = useState<TaskResult | null>(null)
   const [hint, setHint] = useState(true)
+  /** Рядом объект, на который можно посмотреть от первого лица, и открытое окно этого взгляда */
+  const [lookNear, setLookNear] = useState<string | null>(null)
+  const [pov, setPov] = useState<string | null>(null)
+  const povRef = useRef<HTMLDivElement>(null)
+  const lookNearRef = useRef(lookNear)
+  lookNearRef.current = lookNear
+  const startedRef = useRef(false)
   /** Задание начинается после окна «Ситуация»: до этого игрок стоит, время не идёт */
   const [started, setStarted] = useState(false)
   const startedAt = useRef(0)
   const start = () => {
     startedAt.current = Date.now()
+    startedRef.current = true
     setStarted(true)
   }
 
@@ -127,6 +139,12 @@ function WalkGame() {
         const id = nearRef.current.find((x) => !markedRef.current.includes(x))
         if (id) toggle(id)
       },
+      onLookNear: setLookNear,
+      // Q открывает взгляд от первого лица рядом с работником и закрывает его
+      onLookKey: () => {
+        if (!startedRef.current || resultRef.current) return
+        setPov((p) => (p ? null : lookNearRef.current))
+      },
       onReady: () => setStatus('ready'),
       onError: (m) => setStatus(m),
     }, SCENE.options)
@@ -147,7 +165,15 @@ function WalkGame() {
   }, [toggle])
 
   useEffect(() => engineRef.current?.setMarked(marked), [marked])
-  useEffect(() => engineRef.current?.setPaused(!started || !!result), [started, result])
+  useEffect(() => engineRef.current?.setPaused(!started || !!result || !!pov), [started, result, pov])
+  // Окно «от первого лица»: движок рисует вид камеры работника в прямоугольнике povRef; Esc закрывает
+  useEffect(() => {
+    engineRef.current?.setPov(pov, povRef.current)
+    if (!pov) return
+    const onKey = (e: KeyboardEvent) => e.code === 'Escape' && setPov(null)
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [pov])
   // Если у задания нет описания ситуации, начинаем сразу
   useEffect(() => {
     if (task && !task.briefing && !started) start()
@@ -233,6 +259,35 @@ function WalkGame() {
           <div className="thin-scroll absolute right-3 top-3 max-h-[45%] w-72 overflow-y-auto rounded-2xl bg-white/95 p-3 shadow-lg sm:max-h-[60%] sm:w-80">
             <div className="mb-1 text-sm font-bold text-navy">Отмечено: {marked.length}</div>
             <ListCards task={markedTask} img={undefined} selected={marked} onToggle={toggle} onMove={move} />
+          </div>
+        )}
+
+        {/* Взгляд от первого лица: подсказка рядом с работником и само окно */}
+        {started && !result && !pov && lookNear && SCENE.looks?.[lookNear] && (
+          <button
+            onClick={() => setPov(lookNear)}
+            className="absolute left-1/2 top-3 flex -translate-x-1/2 items-center gap-2.5 rounded-xl bg-white/95 py-2 pl-3 pr-2.5 text-sm font-semibold text-ink shadow-lg"
+          >
+            <Eye className="h-4 w-4 text-accent" />
+            {SCENE.looks[lookNear].near} — посмотреть
+            {!touch && <kbd className="rounded border border-line px-1.5 text-xs text-muted">Q</kbd>}
+          </button>
+        )}
+        {pov && (
+          // Без сплошного фона: вид рисуется на холсте под окном, а всё вокруг затемняет тень окна
+          <div className="absolute inset-0 z-20 flex items-center justify-center p-3">
+            <div className="flex w-[min(92vw,760px)] flex-col rounded-2xl shadow-[0_0_0_9999px_rgba(11,42,91,0.55)]">
+              <div className="flex items-center gap-3 rounded-t-2xl bg-white px-4 py-3">
+                <Eye className="h-5 w-5 shrink-0 text-accent" />
+                <b className="flex-1 text-navy">{SCENE.looks?.[pov]?.title}</b>
+                <span className="hidden text-xs text-muted sm:inline">Q или Esc — закрыть</span>
+                <button onClick={() => setPov(null)} className="rounded-lg p-1 text-muted hover:bg-page" aria-label="Закрыть">
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+              {/* Прозрачная область: сюда движок рисует вид глазами работника */}
+              <div ref={povRef} className="aspect-[16/10] w-full rounded-b-2xl ring-4 ring-white" />
+            </div>
           </div>
         )}
 

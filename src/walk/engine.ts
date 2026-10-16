@@ -7,6 +7,8 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
  *   item_<id> — можно осмотреть (свойство inspect_range — свой радиус осмотра, м); к одному объекту можно привязать
  *   несколько карточек: item_<id1>+<id2>, wall_* или свойство solid — препятствие,
  *   spawn_A / goal_B — точки маршрута, walk_min / walk_max — углы зоны, где можно ходить (по умолчанию ±24 м).
+ *   Свойство look = "<id>" — у объекта можно посмотреть «от первого лица» (клавиша Q): камера встаёт в пустышку
+ *   pov_<id> и смотрит на pov_<id>_target, перед ней — то, что держит работник (WalkOptions.povRig).
  */
 
 /** Настройки сцены; без них движок работает как в сцене 1 */
@@ -17,6 +19,8 @@ export interface WalkOptions {
   far?: number
   /** Солнце и тени следуют за игроком — для сцен больше квадрата 50×50 м */
   sunFollow?: boolean
+  /** Что видно в руках «от первого лица» у объекта со свойством look (кнопка Q) */
+  povRig?: (id: string) => { group: THREE.Object3D; update: (t: number) => void }
   /** «Живые» детали сцены: создаются после загрузки, update вызывается каждый кадр */
   ambient?: (root: THREE.Object3D, scene: THREE.Scene) => { update: (dt: number, t: number) => void }
 }
@@ -28,6 +32,10 @@ export interface EngineCallbacks {
   onDistB: (d: number) => void
   /** Нажата клавиша осмотра (E) */
   onInspectKey: () => void
+  /** Рядом объект, на который можно посмотреть от первого лица (null — нет) */
+  onLookNear?: (id: string | null) => void
+  /** Нажата клавиша Q */
+  onLookKey?: () => void
   onReady: () => void
   onError: (msg: string) => void
 }
@@ -62,6 +70,7 @@ export class WalkEngine {
   private goal = new THREE.Vector3()
   private goalRing?: THREE.Mesh
   private labelA?: THREE.Sprite
+  private labelB?: THREE.Sprite
   private spawn = new THREE.Vector3()
   private keys = new Set<string>()
   private stick = { x: 0, y: 0 }
@@ -79,6 +88,10 @@ export class WalkEngine {
   private sun = new THREE.DirectionalLight('#fff4e0', 2.4)
   private bounds = { minX: -WORLD_LIMIT, maxX: WORLD_LIMIT, minZ: -WORLD_LIMIT, maxZ: WORLD_LIMIT }
   private ambient?: { update: (dt: number, t: number) => void }
+  private looks: { id: string; obj: THREE.Object3D; box: THREE.Box3; range: number; eye: THREE.Vector3; target: THREE.Vector3 }[] = []
+  private lastLook: string | null = null
+  /** Окно «от первого лица»: своя камера рисуется поверх основной в прямоугольнике элемента el */
+  private pov: { look: WalkEngine['looks'][number]; el: HTMLElement; cam: THREE.PerspectiveCamera; rig: { update: (t: number) => void } } | null = null
 
   constructor(container: HTMLElement, sceneUrl: string, workerUrl: string, cb: EngineCallbacks, opts: WalkOptions = {}) {
     this.container = container
@@ -174,6 +187,19 @@ export class WalkEngine {
         const box = new THREE.Box3().setFromObject(o)
         for (const id of name.slice(5).split('+')) this.items.push({ id, obj: o, box, mats, range })
       }
+      const look = o.userData.look as string | undefined
+      const eye = look && root.getObjectByName(`pov_${look}`)
+      const at = look && root.getObjectByName(`pov_${look}_target`)
+      if (look && eye && at) {
+        this.looks.push({
+          id: look,
+          obj: o,
+          box: new THREE.Box3().setFromObject(o),
+          range: Number(o.userData.inspect_range) || INSPECT_RANGE,
+          eye: eye.getWorldPosition(new THREE.Vector3()),
+          target: at.getWorldPosition(new THREE.Vector3()),
+        })
+      }
     }
 
     // Отметки точек A и B на земле
@@ -187,7 +213,8 @@ export class WalkEngine {
     ring.rotation.x = -Math.PI / 2
     ring.position.copy(this.goal).setY(0.03)
     this.goalRing = ring
-    this.scene.add(ring, this.groundLabel(this.goal, 'B', '#1E6BFF'))
+    this.labelB = this.groundLabel(this.goal, 'B', '#1E6BFF')
+    this.scene.add(ring, this.labelB)
 
     this.player.position.copy(spawn).setY(0)
     // Камера за спиной игрока, лицом в сторону точки B
@@ -245,6 +272,7 @@ export class WalkEngine {
       e.preventDefault()
     }
     if (k === 'KeyE' && !e.repeat && !this.paused) this.cb.onInspectKey()
+    if (k === 'KeyQ' && !e.repeat) this.cb.onLookKey?.()
   }
   private onKeyUp = (e: KeyboardEvent) => this.keys.delete(e.code)
   private onBlur = () => this.keys.clear()
@@ -285,6 +313,27 @@ export class WalkEngine {
   /** Экранный джойстик: x вправо, y вперёд, значения −1..1 */
   setStick(x: number, y: number) {
     this.stick = { x, y }
+  }
+
+  /** Открывает окно «от первого лица» у объекта id в прямоугольнике элемента el; null — закрывает */
+  setPov(id: string | null, el?: HTMLElement | null) {
+    const look = this.looks.find((l) => l.id === id)
+    if (!look || !el) {
+      if (this.pov) this.scene.remove(this.pov.cam)
+      this.pov = null
+      return
+    }
+    const cam = new THREE.PerspectiveCamera(62, 1.6, 0.02, this.camera.far)
+    cam.position.copy(look.eye)
+    cam.lookAt(look.target)
+    cam.layers.enable(1)
+    const rig = this.opts.povRig?.(look.id)
+    if (rig) {
+      rig.group.traverse((o) => o.layers.set(1)) // руки и прибор видны только в окне
+      cam.add(rig.group)
+    }
+    this.scene.add(cam)
+    this.pov = { look, el, cam, rig: rig ?? { update: () => {} } }
   }
 
   setPaused(p: boolean) {
@@ -338,6 +387,31 @@ export class WalkEngine {
       this.goalRing.scale.setScalar(1 + Math.sin(t * 3) * 0.08)
     }
     this.renderer.render(this.scene, this.camera)
+    if (this.pov) this.renderPov()
+  }
+
+  /** Второй проход: вид глазами работника в прямоугольнике окна; сам работник в этом проходе скрыт */
+  private renderPov() {
+    const { el, cam, look, rig } = this.pov!
+    const c = this.renderer.domElement.getBoundingClientRect()
+    const r = el.getBoundingClientRect()
+    if (r.width < 2 || r.height < 2) return
+    const x = r.left - c.left
+    const y = c.bottom - r.bottom
+    cam.aspect = r.width / r.height
+    cam.updateProjectionMatrix()
+    rig.update(this.clock.elapsedTime)
+    // Скрываем самого работника, игрока, метки маршрута и номера отметок — это игровые подсказки, не мир
+    const hidden = [look.obj, this.player, this.goalRing, this.labelA, this.labelB, ...this.items.map((i) => i.marker)]
+      .filter((o): o is THREE.Object3D => !!o && o.visible)
+    for (const o of hidden) o.visible = false
+    this.renderer.setScissorTest(true)
+    this.renderer.setScissor(x, y, r.width, r.height)
+    this.renderer.setViewport(x, y, r.width, r.height)
+    this.renderer.render(this.scene, cam)
+    this.renderer.setScissorTest(false)
+    this.renderer.setViewport(0, 0, c.width, c.height)
+    for (const o of hidden) o.visible = true
   }
 
   private updatePlayer(dt: number) {
@@ -424,6 +498,23 @@ export class WalkEngine {
         else this.highlighted.delete(it.id)
       }
       this.cb.onNear(near)
+    }
+
+    // Ближайший объект, на который можно посмотреть от первого лица
+    let look: string | null = null
+    let best = Infinity
+    for (const l of this.looks) {
+      const dx = Math.max(l.box.min.x - p.x, 0, p.x - l.box.max.x)
+      const dz = Math.max(l.box.min.z - p.z, 0, p.z - l.box.max.z)
+      const dd = Math.hypot(dx, dz)
+      if (dd < l.range && dd < best) {
+        best = dd
+        look = l.id
+      }
+    }
+    if (look !== this.lastLook) {
+      this.lastLook = look
+      this.cb.onLookNear?.(look)
     }
 
     const d = Math.round(Math.hypot(this.goal.x - p.x, this.goal.z - p.z) * 2) / 2
