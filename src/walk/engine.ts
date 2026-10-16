@@ -129,6 +129,7 @@ export class WalkEngine {
     if (import.meta.env.DEV) {
       ;(window as unknown as { __walk?: unknown }).__walk = {
         teleport: (x: number, z: number) => this.player.position.set(x, 0, z),
+        goal: () => [this.goal.x, this.goal.z],
       }
     }
   }

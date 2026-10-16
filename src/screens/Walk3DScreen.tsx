@@ -34,7 +34,7 @@ interface SceneConfig {
   looks?: Record<string, { near: string; title: string; reveals?: string[] }>
 }
 
-const SCENES: Record<string, SceneConfig> = {
+export const SCENES: Record<string, SceneConfig> = {
   // Сцена 1 — сельская улица с КТПН (готова 15.10.2026)
   landscape: { number: 1, tasksUrl: '/walk-tasks.json', taskId: 'landscape', title: 'Улица у КТПН', route: 'Пройдите по улице от точки A мимо КТПН до фургона (B).' },
   // Локация 2 — город: колодец связи у оживлённой улицы; открывается после локации 1
@@ -54,20 +54,18 @@ const SCENES: Record<string, SceneConfig> = {
 const PARAMS = new URLSearchParams(location.search)
 const IS_CITY = /^\/city\/?$/.test(location.pathname) || location.hash === '#city'
 const SCENE_NAME = IS_CITY ? 'city' : PARAMS.get('scene')?.replace(/[^\w-]/g, '') || 'landscape'
-const SCENE = SCENES[SCENE_NAME] ?? SCENES.landscape
-const SCENE_URL = `/models/${SCENE_NAME}.glb`
 const WORKER_URL = '/models/worker.glb'
-const HIDDEN_UNTIL_LOOK = Object.values(SCENE.looks ?? {}).flatMap((l) => l.reveals ?? [])
 /** На каком расстоянии от B можно завершить осмотр */
 const GOAL_RADIUS = 2
 
 export default function Walk3DScreen() {
+  const name = SCENES[SCENE_NAME] ? SCENE_NAME : 'landscape'
   // В режиме разработки закрытую сцену можно открыть ссылкой ?open
-  const locked = !!SCENE.locked?.() && !(import.meta.env.DEV && PARAMS.has('open'))
-  return locked ? <Locked /> : <WalkGame />
+  const locked = !!SCENES[name].locked?.() && !(import.meta.env.DEV && PARAMS.has('open'))
+  return locked ? <Locked number={SCENES[name].number} /> : <WalkGame sceneName={name} />
 }
 
-function Locked() {
+function Locked({ number }: { number?: number }) {
   return (
     <div className="flex h-dvh flex-col">
       <Header onExit={() => (location.href = '/')} />
@@ -76,7 +74,7 @@ function Locked() {
           <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-page text-navy">
             <Lock className="h-6 w-6" />
           </div>
-          <h2 className="text-lg font-bold text-navy">Локация {SCENE.number} «Город» пока закрыта</h2>
+          <h2 className="text-lg font-bold text-navy">Локация {number} «Город» пока закрыта</h2>
           <p className="mt-2 text-sm leading-relaxed text-muted">
             Она откроется после прохождения локации 1 с результатом не ниже {config.passThresholdPercent}%.
           </p>
@@ -89,7 +87,20 @@ function Locked() {
   )
 }
 
-function WalkGame() {
+interface WalkGameProps {
+  sceneName: string
+  /** Экзамен: после разбора кнопка «Далее» передаёт результат дальше вместо «Ещё раз» и ссылок */
+  onComplete?: (result: TaskResult) => void
+  /** Экзамен: номер этапа в шапке */
+  stage?: { current: number; total: number }
+  onExit?: () => void
+}
+
+export function WalkGame({ sceneName, onComplete, stage, onExit = () => (location.href = '/') }: WalkGameProps) {
+  const SCENE = SCENES[sceneName]
+  const SCENE_URL = `/models/${sceneName}.glb`
+  const HIDDEN_UNTIL_LOOK = Object.values(SCENE.looks ?? {}).flatMap((l) => l.reveals ?? [])
+  const exam = !!onComplete
   const mountRef = useRef<HTMLDivElement>(null)
   const engineRef = useRef<WalkEngine | null>(null)
   const [task, setTask] = useState<Task | null>(null)
@@ -124,7 +135,7 @@ function WalkGame() {
       .then((r) => r.json())
       .then((d: Task[]) => setTask(d.find((t) => t.id === SCENE.taskId) ?? null))
       .catch((e: Error) => setStatus(e.message))
-  }, [])
+  }, [SCENE])
 
   const toggle = useCallback((id: string) => setMarked((m) => (m.includes(id) ? m.filter((x) => x !== id) : [...m, id])), [])
   const nearRef = useRef(near)
@@ -155,7 +166,7 @@ function WalkGame() {
     }, SCENE.options)
     engineRef.current = engine
     return () => engine.dispose()
-  }, [toggle])
+  }, [toggle, SCENE, SCENE_URL])
 
   // Цифры 1–9 отмечают или снимают карточку с этим номером в списке «рядом»
   useEffect(() => {
@@ -202,7 +213,7 @@ function WalkGame() {
     if (!task) return
     const r = scoreTask(task, marked, Math.round((Date.now() - startedAt.current) / 1000), false)
     const percent = r.maxScore ? Math.round((r.score / r.maxScore) * 100) : 0
-    setOutcome({ percent, cityOpen: SCENE.number === 1 && saveLoc1Result(percent) })
+    setOutcome({ percent, cityOpen: !exam && SCENE.number === 1 && saveLoc1Result(percent) })
     setResult(r)
   }
 
@@ -213,7 +224,7 @@ function WalkGame() {
 
   return (
     <div className="flex h-dvh flex-col">
-      <Header onExit={() => (location.href = '/')} />
+      <Header onExit={onExit} current={stage?.current ?? null} total={stage?.total} />
 
       <div className="relative flex-1 overflow-hidden bg-[#a9d6f5]">
         <div ref={mountRef} className="absolute inset-0" />
@@ -358,7 +369,7 @@ function WalkGame() {
                   <div className="text-sm text-muted">
                     Результат: <b className={outcome.percent >= config.passThresholdPercent ? 'text-ok' : 'text-bad'}>{outcome.percent}%</b> · порог допуска {config.passThresholdPercent}%
                   </div>
-                  {SCENE.number === 1 &&
+                  {SCENE.number === 1 && !exam &&
                     (outcome.cityOpen ? (
                       <div className="mt-2 flex items-center gap-2 rounded-lg bg-ok/10 px-3 py-2 text-sm font-semibold text-ok">
                         <Building2 className="h-4 w-4 shrink-0" /> Открыта локация 2 «Город»
@@ -373,6 +384,13 @@ function WalkGame() {
               <div className="thin-scroll min-h-0 flex-1 overflow-y-auto px-5 pb-3">
                 <ReviewList task={task} img={undefined} result={result} hoveredId={null} onHover={() => {}} />
               </div>
+              {onComplete ? (
+                <div className="border-t border-line p-4">
+                  <button onClick={() => onComplete(result)} autoFocus className="w-full rounded-[10px] bg-action py-2.5 font-semibold text-white transition hover:bg-action-dark">
+                    Далее
+                  </button>
+                </div>
+              ) : (
               <div className="grid grid-cols-2 gap-3 border-t border-line p-4">
                 <button onClick={() => location.reload()} className="rounded-[10px] border-2 border-action py-2.5 font-semibold text-action">
                   Ещё раз
@@ -387,6 +405,7 @@ function WalkGame() {
                   </a>
                 )}
               </div>
+              )}
             </div>
           </div>
         )}

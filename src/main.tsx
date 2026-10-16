@@ -12,10 +12,17 @@ const Walk3DScreen = lazy(() => import('./screens/Walk3DScreen'))
 const isWalk = /^\/walk\/?$/.test(location.pathname) || location.hash === '#walk'
 // Локация 2 «Город»: /city (или #city) — тот же режим ходьбы со сценой city; открывается после локации 1
 const isCity = /^\/city\/?$/.test(location.pathname) || location.hash === '#city'
+// Экзамен: вход → теория → сцены симулятора по очереди → сводка: /exam (или #exam)
+const ExamScreen = lazy(() => import('./screens/ExamScreen'))
+const isExam = /^\/exam\/?$/.test(location.pathname) || location.hash === '#exam'
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    {isEditor || isWalk || isCity ? (
+    {isExam ? (
+      <Suspense fallback={null}>
+        <ExamScreen />
+      </Suspense>
+    ) : isEditor || isWalk || isCity ? (
       <Suspense fallback={null}>{isEditor ? <EditorScreen /> : <Walk3DScreen />}</Suspense>
     ) : (
       <App />

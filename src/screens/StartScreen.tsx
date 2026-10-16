@@ -3,10 +3,22 @@ import { ShieldCheck } from 'lucide-react'
 import { config } from '../config'
 import { loadLastPlayer } from '../lib/storage'
 import { useGame } from '../store/useGame'
+import type { Player } from '../types'
 
 export function StartScreen() {
   const start = useGame((s) => s.start)
   const count = useGame((s) => s.tasks.length)
+  return (
+    <PlayerForm
+      title="БИОТ – Допуск к работе"
+      description={`${count} заданий: на сценах у сельской АТС найдите нарушения техники безопасности и расставьте их от наиболее критичного к менее значимому. Для допуска нужно набрать не менее ${config.passThresholdPercent}%.`}
+      onSubmit={start}
+    />
+  )
+}
+
+/** Вход: ФИО, табельный номер, подразделение. Общая форма для тренажёра и экзамена */
+export function PlayerForm({ title, description, onSubmit }: { title: string; description: string; onSubmit: (p: Player) => void }) {
   const last = loadLastPlayer()
   const [fio, setFio] = useState(last?.fio ?? '')
   const [tabNo, setTabNo] = useState(last?.tabNo ?? '')
@@ -18,7 +30,7 @@ export function StartScreen() {
   const submit = (e: React.FormEvent) => {
     e.preventDefault()
     setTouched(true)
-    if (valid) start({ fio: fio.trim().replace(/\s+/g, ' '), tabNo: tabNo.trim(), department })
+    if (valid) onSubmit({ fio: fio.trim().replace(/\s+/g, ' '), tabNo: tabNo.trim(), department })
   }
 
   const field = 'w-full rounded-[10px] border border-line bg-white px-3.5 py-3 text-[15px] outline-none transition focus:border-accent focus:ring-4 focus:ring-accent/15'
@@ -31,11 +43,8 @@ export function StartScreen() {
             <img src="/logo.svg" alt="" className="h-12 w-12" />
             <span className="text-lg font-bold tracking-wide text-navy">КАЗАХТЕЛЕКОМ</span>
           </div>
-          <h1 className="mt-6 text-2xl font-bold text-navy sm:text-[28px]">БИОТ – Допуск к работе</h1>
-          <p className="mt-2 text-sm leading-relaxed text-muted">
-            {count} заданий: на сценах у сельской АТС найдите нарушения техники безопасности и расставьте их от наиболее
-            критичного к менее значимому. Для допуска нужно набрать не менее {config.passThresholdPercent}%.
-          </p>
+          <h1 className="mt-6 text-2xl font-bold text-navy sm:text-[28px]">{title}</h1>
+          <p className="mt-2 text-sm leading-relaxed text-muted">{description}</p>
 
           <div className="mt-6 flex flex-col gap-4">
             <label className="block">

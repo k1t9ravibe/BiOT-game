@@ -40,6 +40,14 @@ export const config = {
   /** Путь к файлу заданий */
   tasksUrl: '/tasks.json',
 
+  /** Экзамен (/exam): вход → теория → сцены симулятора по очереди → сводка.
+   *  Экзамен сдан, если и теория, и симулятор набрали не меньше passThresholdPercent */
+  exam: {
+    theoryUrl: '/exam-theory.json',
+    /** Сцены режима ходьбы в порядке прохождения (ключи SCENES в Walk3DScreen) */
+    scenes: ['landscape', 'city'],
+  },
+
   /** Подразделения для выпадающего списка на старте */
   departments: [
     'ДТК Алматы',
