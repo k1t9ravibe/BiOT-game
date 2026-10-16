@@ -389,3 +389,23 @@ def raise_arm(meshes, side, angle, rz):
     hand = next(o for o in arm if base_name(o).startswith("hand"))
     hp = [hand.matrix_world @ v.co for v in hand.data.vertices]
     return sum(hp, V()) / len(hp)  # где теперь кисть — чтобы вложить в неё предмет
+
+
+def bend_leg(meshes, side, angle, rz):
+    """Поднимает ногу модели монтёра вперёд на angle градусов вокруг бедра (поза сидя); side — «1» или «-1»"""
+    forward = V((math.sin(rz), -math.cos(rz), 0))
+    axis = forward.cross(V((0, 0, 1)))
+    leg = [o for o in meshes if base_name(o) in (f"trouser{side}", f"boot{side}")]
+    pts = [o.matrix_world @ v.co for o in leg if base_name(o).startswith("trouser") for v in o.data.vertices]
+    pivot = V((sum(p.x for p in pts) / len(pts), sum(p.y for p in pts) / len(pts), max(p.z for p in pts) - 0.03))
+    m = Matrix.Translation(pivot) @ Matrix.Rotation(rad(angle), 4, axis) @ Matrix.Translation(-pivot)
+    for o in leg:
+        o.matrix_world = m @ o.matrix_world
+
+
+def recolor(meshes, prefixes, material):
+    """Меняет материал деталей модели по началу базового имени: кроссовки вместо ботинок, перчатки на кистях"""
+    for o in meshes:
+        if base_name(o).startswith(prefixes):
+            o.data.materials.clear()
+            o.data.materials.append(material)

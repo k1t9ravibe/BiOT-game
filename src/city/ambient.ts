@@ -128,6 +128,43 @@ export function cityAmbient(root: THREE.Object3D, scene: THREE.Scene) {
   const puffs: Puff[] = []
   let smokeTimer = 0
 
+  // Выхлоп бензинового генератора: сизые клубы сносит ветром к люку, и они уходят вниз, в колодец
+  const exSrc = find('exhaust_src')?.getWorldPosition(new THREE.Vector3())
+  const exTo = find('exhaust_to')?.getWorldPosition(new THREE.Vector3())
+  const exhaust: { mesh: THREE.Mesh<THREE.BufferGeometry, THREE.MeshStandardMaterial>; age: number }[] = []
+  const EX_LIFE = 2.6
+  let exTimer = 0
+  function updateExhaust(dt: number) {
+    if (!exSrc || !exTo) return
+    exTimer -= dt
+    if (exTimer <= 0) {
+      exTimer = 0.18
+      let p = exhaust.find((x) => x.age >= EX_LIFE)
+      if (!p) {
+        const mat = new THREE.MeshStandardMaterial({ color: '#7d848c', flatShading: true, roughness: 1, transparent: true, depthWrite: false })
+        p = { mesh: new THREE.Mesh(puffGeo, mat), age: 0 }
+        scene.add(p.mesh)
+        exhaust.push(p)
+      }
+      p.age = 0
+      p.mesh.rotation.set(Math.random() * 3, Math.random() * 3, 0)
+      p.mesh.visible = true
+    }
+    for (const p of exhaust) {
+      if (p.age >= EX_LIFE) {
+        p.mesh.visible = false
+        continue
+      }
+      p.age += dt
+      const k = Math.min(1, p.age / EX_LIFE)
+      // По дуге: сначала поднимается из трубы, потом опускается в люк
+      p.mesh.position.lerpVectors(exSrc, exTo, k)
+      p.mesh.position.y += Math.sin(k * Math.PI) * 0.35
+      p.mesh.scale.setScalar(0.08 + Math.sin(k * Math.PI) * 0.22)
+      p.mesh.material.opacity = 0.65 * Math.sin(Math.min(1, k * 1.2) * Math.PI)
+    }
+  }
+
   function updateTraffic(dt: number) {
     for (const dir of [1, -1] as const) {
       // Едущий впереди — первый; держим дистанцию до него
@@ -213,6 +250,7 @@ export function cityAmbient(root: THREE.Object3D, scene: THREE.Scene) {
       if (slew) slew.rotation.y = Math.sin(t * 0.13) * 0.75
       if (trolley) trolley.position.x = trolleyX0 + Math.sin(t * 0.21 + 1) * 7
       updateSmoke(dt)
+      updateExhaust(dt)
       for (const c of clouds) {
         c.obj.position.x += c.speed * dt
         if (c.obj.position.x > 420) c.obj.position.x = -200
