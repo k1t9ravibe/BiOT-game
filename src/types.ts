@@ -33,33 +33,6 @@ export interface Task {
   items: TaskItem[]
 }
 
-/** Локация 2 «Город»: вопрос с вариантами ответа, правильный — один */
-export interface CityQuestion {
-  id: string
-  text: string
-  options: string[]
-  /** Номер правильного варианта с нуля */
-  correct: number
-  explanation: string
-  rule?: string
-}
-
-/** Здание-организация в городе; id совпадает с объектом bld_<id> в сцене */
-export interface CitySite {
-  id: string
-  title: string
-  /** Что за объект и какие работы на нём ведёт монтёр */
-  org: string
-  questions: CityQuestion[]
-}
-
-export interface CityData {
-  title: string
-  /** Описание ситуации перед началом, абзацы через пустую строку */
-  briefing: string
-  sites: CitySite[]
-}
-
 export interface Player {
   fio: string
   tabNo: string

@@ -6,8 +6,20 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
  * Роли объектов берутся из имён в .glb (см. blender/build_t1.py):
  *   item_<id> — можно осмотреть (свойство inspect_range — свой радиус осмотра, м); к одному объекту можно привязать
  *   несколько карточек: item_<id1>+<id2>, wall_* или свойство solid — препятствие,
- *   spawn_A / goal_B — точки маршрута.
+ *   spawn_A / goal_B — точки маршрута, walk_min / walk_max — углы зоны, где можно ходить (по умолчанию ±24 м).
  */
+
+/** Настройки сцены; без них движок работает как в сцене 1 */
+export interface WalkOptions {
+  /** Туман: где начинается и где всё скрывается, м */
+  fog?: [number, number]
+  /** Дальность прорисовки камеры, м */
+  far?: number
+  /** Солнце и тени следуют за игроком — для сцен больше квадрата 50×50 м */
+  sunFollow?: boolean
+  /** «Живые» детали сцены: создаются после загрузки, update вызывается каждый кадр */
+  ambient?: (root: THREE.Object3D, scene: THREE.Scene) => { update: (dt: number, t: number) => void }
+}
 
 export interface EngineCallbacks {
   /** id объектов в радиусе осмотра, ближайший первым */
@@ -63,10 +75,17 @@ export class WalkEngine {
   private disposed = false
   private container: HTMLElement
   private cb: EngineCallbacks
+  private opts: WalkOptions
+  private sun = new THREE.DirectionalLight('#fff4e0', 2.4)
+  private bounds = { minX: -WORLD_LIMIT, maxX: WORLD_LIMIT, minZ: -WORLD_LIMIT, maxZ: WORLD_LIMIT }
+  private ambient?: { update: (dt: number, t: number) => void }
 
-  constructor(container: HTMLElement, sceneUrl: string, workerUrl: string, cb: EngineCallbacks) {
+  constructor(container: HTMLElement, sceneUrl: string, workerUrl: string, cb: EngineCallbacks, opts: WalkOptions = {}) {
     this.container = container
     this.cb = cb
+    this.opts = opts
+    this.camera.far = opts.far ?? 200
+    this.camera.updateProjectionMatrix()
     this.renderer = new THREE.WebGLRenderer({ antialias: true })
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
     this.renderer.shadowMap.enabled = true
@@ -77,15 +96,16 @@ export class WalkEngine {
 
     // Небо, туман у горизонта, свет
     this.scene.background = new THREE.Color('#a9d6f5')
-    this.scene.fog = new THREE.Fog('#cfe6f5', 30, 70)
+    const [fogNear, fogFar] = opts.fog ?? [30, 70]
+    this.scene.fog = new THREE.Fog('#cfe6f5', fogNear, fogFar)
     this.scene.add(new THREE.HemisphereLight('#dff1ff', '#8a9a5b', 1.6))
-    const sun = new THREE.DirectionalLight('#fff4e0', 2.4)
+    const sun = this.sun
     sun.position.set(12, 20, 8)
     sun.castShadow = true
     sun.shadow.mapSize.set(2048, 2048)
     Object.assign(sun.shadow.camera, { left: -25, right: 25, top: 25, bottom: -25, near: 1, far: 60 })
     sun.shadow.bias = -0.0005
-    this.scene.add(sun)
+    this.scene.add(sun, sun.target)
 
     this.ro = new ResizeObserver(() => this.resize())
     this.ro.observe(container)
@@ -101,6 +121,7 @@ export class WalkEngine {
       if (this.disposed) return
       this.setupWorld(world.scene)
       this.setupPlayer(worker.scene)
+      this.ambient = this.opts.ambient?.(world.scene, this.scene)
       this.cb.onReady()
       this.loop()
     } catch (e) {
@@ -117,6 +138,18 @@ export class WalkEngine {
         o.receiveShadow = true
       }
     })
+
+    // Зона, где можно ходить: пустышки walk_min / walk_max (оси Blender X/Y → three X/−Z)
+    const wmin = root.getObjectByName('walk_min')?.position
+    const wmax = root.getObjectByName('walk_max')?.position
+    if (wmin && wmax) {
+      this.bounds = {
+        minX: Math.min(wmin.x, wmax.x),
+        maxX: Math.max(wmin.x, wmax.x),
+        minZ: Math.min(wmin.z, wmax.z),
+        maxZ: Math.max(wmin.z, wmax.z),
+      }
+    }
 
     let spawn = new THREE.Vector3()
     for (const o of [...root.children]) {
@@ -291,6 +324,12 @@ export class WalkEngine {
     const dt = Math.min(this.clock.getDelta(), 0.05)
     if (!this.paused) this.updatePlayer(dt)
     this.updateCamera(dt)
+    if (this.opts.sunFollow) {
+      const p = this.player.position
+      this.sun.position.set(p.x + 12, 20, p.z + 8)
+      this.sun.target.position.copy(p)
+    }
+    this.ambient?.update(dt, this.clock.elapsedTime)
     this.updateProximity()
     // Метку A прячем, когда игрок отошёл от старта, — иначе камера проходит сквозь неё
     if (this.labelA) this.labelA.visible = this.player.position.distanceTo(this.spawn) < 1.5
@@ -322,9 +361,10 @@ export class WalkEngine {
       move.normalize()
       const p = this.player.position
       // Сдвиг по осям по отдельности — так игрок «скользит» вдоль стен
-      const nx = THREE.MathUtils.clamp(p.x + move.x * speed * dt, -WORLD_LIMIT, WORLD_LIMIT)
+      const b = this.bounds
+      const nx = THREE.MathUtils.clamp(p.x + move.x * speed * dt, b.minX, b.maxX)
       if (!this.blocked(nx, p.z)) p.x = nx
-      const nz = THREE.MathUtils.clamp(p.z + move.z * speed * dt, -WORLD_LIMIT, WORLD_LIMIT)
+      const nz = THREE.MathUtils.clamp(p.z + move.z * speed * dt, b.minZ, b.maxZ)
       if (!this.blocked(p.x, nz)) p.z = nz
 
       // Плавный поворот в сторону движения

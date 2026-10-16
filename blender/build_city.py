@@ -1,5 +1,7 @@
 """
-Локация 2 «Город»: улица днём, вид сбоку с горизонтальной прокруткой (src/city/engine.ts).
+Локация 2 «Город»: улица днём для режима ходьбы от третьего лица (как сцена 1).
+Игрок идёт по тротуару от точки A к открытому колодцу (B): один монтёр спускается, второй у края
+с газоанализатором. Здания-организации — фон, их оживляет src/city/ambient.ts.
 
 Запуск (из корня проекта):
     "C:\\Program Files\\Blender Foundation\\Blender 4.5\\blender.exe" --background --python blender/build_city.py
@@ -8,19 +10,18 @@
     public/models/city.glb   — сцена для игры (http://localhost:5173/city)
     blender/city_base.blend  — исходник; скрипт перезаписывает его при каждом запуске
 
-Оси Blender: X — вдоль улицы, Y — вглубь от камеры, Z — вверх. Слои по глубине дают параллакс:
-передний план (газон, тротуар, дорога) → здания-организации → дома среднего плана → силуэты высоток.
+Оси Blender: X — вдоль улицы, Y — через улицу (здания-организации на +Y), Z — вверх.
 
-Имена, которые читает игра:
-    bld_<id>        — здание-организация (кликабельно): houses, clinic, fire, business, construction, factory
-    spot_<id>       — где над зданием висит метка
-    win_<id>_<k>    — окна, которые мигают
+Имена, которые читает игра (src/walk/engine.ts — как в сцене 1):
+    item_<id>[+<id2>] — объект задания «city» в public/walk-tasks.json, wall_* / solid — препятствие
+    spawn_A, goal_B   — старт и финиш; walk_min / walk_max — углы зоны, где можно ходить
+И «живая улица» (src/city/ambient.ts):
+    win_<...>       — окна, которые поблёскивают
     crane_slew      — поворотная часть крана (вращается вокруг своего начала координат), crane_trolley — тележка
     smoke_src       — устье заводской трубы
-    car_tpl_<вид>   — образцы машин (игра клонирует их на полосы); материал «Кузов авто» перекрашивается
+    car_tpl_<вид>   — образцы машин (клонируются на полосы); материал «Кузов авто» перекрашивается
     ped_tpl_<n>     — образцы пешеходов; дети <...>_leg_L/R, <...>_arm_L/R качаются при ходьбе
-    lane_near / lane_far / walk_near / walk_far — оси полос и тротуаров (по Y)
-    cam_min / cam_max — пределы прокрутки камеры по X
+    lane_near / lane_far / walk_far — оси полос и дальнего тротуара (по Y)
 """
 
 import math
@@ -32,11 +33,13 @@ import bpy
 from mathutils import Vector as V
 
 sys.path.insert(0, os.path.dirname(__file__))
-from lowpoly import M, MB, base_materials, empty, gable, mat, picket_fence, principled, rad, srgb, tree, window  # noqa: E402
+from lowpoly import (M, MB, base_materials, empty, gable, mat, picket_fence, place_model, principled, raise_arm,  # noqa: E402
+                     rad, srgb, tree, window)
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 OUT_GLB = os.path.join(ROOT, "public", "models", "city.glb")
 OUT_BLEND = os.path.join(ROOT, "blender", "city_base.blend")
+WORKER_GLB = os.path.join(ROOT, "blender", "assets", "kazakhtelecom_worker_rounded_realistic.glb")
 
 random.seed(11)
 
@@ -46,6 +49,7 @@ WALK_NEAR = (-7.0, -3.0)   # ближний тротуар
 WALK_FAR = (5.0, 8.6)      # дальний тротуар
 LANE_NEAR, LANE_FAR = -1.0, 3.0   # оси полос: ближняя едет по +X, дальняя по −X
 TEMPLATES_X = -400         # образцы машин и пешеходов стоят далеко за кадром
+MANHOLE = (58.0, -10.5)    # открытый колодец на газоне у тротуара — точка B рядом
 
 
 def glow(m, hex_color, strength=1.0):
@@ -122,18 +126,19 @@ def city_materials():
 
 def build_street():
     g = MB("ground")
-    g.span(X0 - 200, -80, -0.05, X1 + 260, 700, -0.01, M["ground"])
+    g.span(X0 - 200, -700, -0.05, X1 + 260, 700, -0.01, M["ground"])
     g.span(X0, -40, -0.01, X1, WALK_NEAR[0], 0.0, M["lawn"])
     g.build()
 
     s = MB("street")
     s.span(X0, CURB_NEAR, 0.0, X1, CURB_FAR, 0.02, M["asphalt"])
     for y0, y1 in (WALK_NEAR, WALK_FAR):
-        s.span(X0, y0, 0.0, X1, y1, 0.12, M["paving"])
+        # Плитка почти вровень с газоном: игрок ходит по плоскости z = 0, ноги не должны уходить в тротуар
+        s.span(X0, y0, 0.0, X1, y1, 0.04, M["paving"])
         for x in range(X0, X1, 3):  # швы плитки
-            s.span(x, y0, 0.12, x + 0.05, y1, 0.125, M["paving_dark"])
+            s.span(x, y0, 0.04, x + 0.05, y1, 0.045, M["paving_dark"])
     for y in (CURB_NEAR, CURB_FAR):  # бордюры
-        s.span(X0, y - 0.15, 0.0, X1, y + 0.15, 0.16, M["curb"])
+        s.span(X0, y - 0.15, 0.0, X1, y + 0.15, 0.14, M["curb"])
     for x in range(X0, X1, 6):  # прерывистая осевая
         s.span(x, 0.92, 0.02, x + 3, 1.08, 0.03, M["marking"])
     for y in (CURB_NEAR + 0.35, CURB_FAR - 0.35):  # краевые линии
@@ -145,31 +150,44 @@ def build_street():
 
     empty("lane_near", (0, LANE_NEAR, 0))
     empty("lane_far", (0, LANE_FAR, 0))
-    empty("walk_near", (0, -4.6, 0.12))
-    empty("walk_far", (0, 6.0, 0.12))
+    empty("walk_far", (0, 6.0, 0.04))  # по дальнему тротуару ходят прохожие; ближний — для игрока
+
+
+def lamp(mb, x, y, arm):
+    mb.cyl((x, y, 0.04), (x, y, 6.2), 0.09, 0.06, M["dark"], n=8)
+    mb.beam((x, y, 6.1), (x, y + arm * 1.2, 6.3), 0.06, 0.06, M["dark"])
+    mb.box((x, y + arm * 1.3, 6.2), (0.5, 0.3, 0.14), M["dark"])
+    mb.box((x, y + arm * 1.3, 6.11), (0.4, 0.22, 0.04), M["lamp"])
 
 
 def street_furniture():
-    mb = MB("street_furniture")
-    trunks, crowns = MB("street_tree_trunks"), MB("street_tree_crowns")
+    """Фонари, кадки с деревьями, живая изгородь, скамейки, остановка, светофоры.
+    На ближней стороне, где ходит игрок, каждая вещь — отдельный объект wall_* (узкое препятствие)"""
+    far = MB("street_furniture_far")
+    crowns = MB("street_tree_crowns")
     for k, x in enumerate(range(X0 + 4, X1, 16)):
-        for y, arm in ((CURB_NEAR - 0.5, 1), (CURB_FAR + 0.5, -1)):  # фонари вдоль обоих тротуаров
-            xx = x + (8 if arm < 0 else 0)
-            mb.cyl((xx, y, 0.1), (xx, y, 6.2), 0.09, 0.06, M["dark"], n=8)
-            mb.beam((xx, y, 6.1), (xx, y + arm * 1.2, 6.3), 0.06, 0.06, M["dark"])
-            mb.box((xx, y + arm * 1.3, 6.2), (0.5, 0.3, 0.14), M["dark"])
-            mb.box((xx, y + arm * 1.3, 6.11), (0.4, 0.22, 0.04), M["lamp"])
-        # Деревья в кадках и живая изгородь на ближнем тротуаре
+        lamp(far, x + 8, CURB_FAR + 0.5, -1)
+        mb = MB(f"wall_lamp_{k}")
+        lamp(mb, x, CURB_NEAR - 0.5, 1)
+        mb.build()
         tx = x + 8
-        mb.span(tx - 0.8, -6.9, 0.12, tx + 0.8, -5.3, 0.55, M["curb"])
-        tree(trunks, crowns, "birch" if k % 3 == 1 else "tree", tx, -6.1, s=0.85, z=0.55)
+        mb = MB(f"wall_planter_{k}")
+        mb.span(tx - 0.8, -6.9, 0.04, tx + 0.8, -5.3, 0.55, M["curb"])
+        tree(mb, crowns, "birch" if k % 3 == 1 else "tree", tx, -6.1, s=0.85, z=0.55)
+        mb.build()
+        mb = MB(f"wall_hedge_{k}")
         mb.box((x + 2, -7.6, 0.45), (5.0, 0.9, 0.9), M["leaf"])
-    for bx in (12, 58, 96, 150):  # скамейки
+        mb.build()
+    crowns.build()
+    for k, bx in enumerate((12, 96, 150)):  # скамейки
+        mb = MB(f"wall_bench_{k}")
         mb.box((bx, -6.4, 0.45), (1.8, 0.45, 0.06), M["wood"])
         mb.box((bx, -6.62, 0.75), (1.8, 0.06, 0.4), M["wood"])
         for s in (-1, 1):
             mb.box((bx + s * 0.75, -6.45, 0.3), (0.08, 0.4, 0.4), M["dark"])
+        mb.build()
     # Остановка у поликлиники
+    mb = MB("wall_bus_stop")
     sx = 40
     mb.span(sx - 2.5, -6.9, 2.6, sx + 2.5, -5.3, 2.75, M["white"])
     mb.span(sx - 2.4, -6.85, 0.3, sx + 2.4, -6.8, 2.5, M["stop_glass"])
@@ -177,13 +195,39 @@ def street_furniture():
         mb.box((sx + s * 2.4, -6.85, 1.4), (0.08, 0.08, 2.6), M["metal"])
     mb.box((sx, -6.55, 0.5), (3.0, 0.4, 0.06), M["wood"])
     mb.box((sx + 2.9, -5.6, 2.8), (0.05, 0.6, 0.6), M["hoarding"])
-    mb.cyl((sx + 2.9, -5.6, 0.1), (sx + 2.9, -5.6, 2.5), 0.04, 0.04, M["metal"], n=6)
-    # Светофор у «зебры»
-    for y, f in ((CURB_NEAR - 0.4, 1), (CURB_FAR + 0.4, -1)):
-        mb.cyl((32.6, y, 0.1), (32.6, y, 3.2), 0.07, 0.07, M["dark"], n=6)
+    mb.cyl((sx + 2.9, -5.6, 0.04), (sx + 2.9, -5.6, 2.5), 0.04, 0.04, M["metal"], n=6)
+    mb.build()
+    # Светофоры у «зебры»
+    for name, y, f, target in (("wall_traffic_light", CURB_NEAR - 0.4, 1, None), ("traffic_light_far", CURB_FAR + 0.4, -1, far)):
+        mb = target or MB(name)
+        mb.cyl((32.6, y, 0.04), (32.6, y, 3.2), 0.07, 0.07, M["dark"], n=6)
         mb.box((32.6, y, 3.5), (0.3, 0.3, 0.9), M["dark"])
         for z, c in ((3.8, "red"), (3.5, "hazard"), (3.2, "leaf_light")):
             mb.cyl((32.6, y - f * 0.16, z), (32.6, y - f * 0.2, z), 0.1, 0.1, M[c], n=8)
+        if target is None:
+            mb.build()
+    far.build()
+
+
+def build_near_side():
+    """Ближняя сторона улицы (раньше была за камерой): живая изгородь по краю газона, сквер, пятиэтажки"""
+    mb = MB("near_side")
+    trunks, crowns = MB("near_side_trunks"), MB("near_side_crowns")
+    mb.span(X0, -16.3, 0, X1, -15.5, 1.1, M["leaf"])  # граница прогулочной зоны игрока
+    mb.span(X0, -40, -0.005, X1, -16.3, 0.0, M["lawn"])
+    for k in range(40):
+        x = X0 + 4 + k * 7.5 + random.uniform(-2, 2)
+        y = random.uniform(-25, -18)
+        tree(trunks, crowns, random.choice(("tree", "birch", "pine", "tree")), x, y, s=random.uniform(0.8, 1.1))
+    for k, x in enumerate(range(X0 + 6, X1, 26)):
+        h = random.choice((15.5, 15.5, 27))
+        m = M[random.choice(("block_a", "block_b", "block_c"))]
+        y0, y1 = -44, -32
+        mb.span(x, y0, 0, x + 20, y1, h, m)
+        mb.span(x - 0.2, y0 - 0.2, h, x + 20.2, y1 + 0.2, h + 0.5, M["white"])
+        for z in range(2, int(h) - 1, 3):
+            for c in range(9):
+                mb.box((x + 1.2 + c * 2.2, y1 + 0.03, z + 0.4), (1.1, 0.06, 1.3), M["glass"])
     mb.build()
     trunks.build()
     crowns.build()
@@ -242,7 +286,6 @@ def build_houses():
     mb.build(parent=p)
     trunks.build(parent=p)
     crowns.build(parent=p)
-    empty("spot_houses", (15, 10.5, 10.5))
 
 
 # ---------- 2. Поликлиника ----------
@@ -286,7 +329,6 @@ def build_clinic():
     for k, (wx, z) in enumerate(panes[:4]):
         blink(f"win_clinic_{k}", p, (wx, y0 - 0.07, z), 1.4, 1.4)
     ambulance(p, (49.5, 7.9, 0))
-    empty("spot_clinic", (43, 10.5, 13.6))
 
 
 def ambulance(parent, pos):
@@ -349,7 +391,6 @@ def build_fire_station():
     for k, (wx, z) in enumerate(panes[1::2]):
         blink(f"win_fire_{k}", p, (wx, y0 - 0.07, z), 1.2, 1.4)
     fire_truck(p, (66.0, 9.3, 0))
-    empty("spot_fire", (66, 10.5, 12.5))
 
 
 def fire_truck(parent, pos):
@@ -410,7 +451,6 @@ def build_business():
         x = x0 + 0.75 + random.randrange(12) * 1.5
         z = 7 + random.randrange(9) * 4
         blink(f"win_business_{k}", p, (x, y0 - 0.06, z), 1.3, 3.5)
-    empty("spot_business", (95, 10.5, 30))
 
 
 # ---------- 5. Стройплощадка с башенным краном ----------
@@ -474,7 +514,6 @@ def build_construction():
     mb.build(parent=p)
 
     build_crane(p, (136.5, 22.5))
-    empty("spot_construction", (124, 10.5, 26))
 
 
 def lattice(mb, a, b, w, m, n=None):
@@ -603,7 +642,6 @@ def build_factory():
     for k in range(4):
         blink(f"win_factory_band_{k}", p, (x0 + 3 + k * 6, y0 - 0.1, 6.65), 1.8, 1.2)
     empty("smoke_src", (cx, cy, ch + 0.5))
-    empty("spot_factory", (158, 10.5, 15))
 
 
 # ---------- Город на фоне: дома среднего плана и силуэты высоток ----------
@@ -626,19 +664,97 @@ def build_backdrop():
 
     sky = MB("city_skyline")
     mats = ("sky_a", "sky_b", "sky_c")
-    x = X0 - 120
-    while x < X1 + 140:
-        w = random.uniform(9, 22)
-        h = random.uniform(22, 78)
-        y0 = random.uniform(110, 170)
-        m = M[random.choice(mats)]
-        sky.span(x, y0, 0, x + w, y0 + w * 0.8, h, m)
-        if random.random() < 0.35:  # ступенчатая верхушка / шпиль
-            sky.span(x + w * 0.2, y0 + w * 0.15, h, x + w * 0.8, y0 + w * 0.65, h + random.uniform(5, 12), m)
-        if random.random() < 0.2:
-            sky.cyl((x + w / 2, y0 + w * 0.4, h), (x + w / 2, y0 + w * 0.4, h + 16), 0.5, 0.0, m, n=5)
-        x += w + random.uniform(-3, 6)
+    for side in (1, -1):  # силуэты высоток по обе стороны улицы — игрок может оглянуться
+        x = X0 - 120
+        while x < X1 + 140:
+            w = random.uniform(9, 22)
+            h = random.uniform(22, 78)
+            y0 = side * random.uniform(110, 170) - (w * 0.8 if side < 0 else 0)
+            m = M[random.choice(mats)]
+            sky.span(x, y0, 0, x + w, y0 + w * 0.8, h, m)
+            if random.random() < 0.35:  # ступенчатая верхушка / шпиль
+                sky.span(x + w * 0.2, y0 + w * 0.15, h, x + w * 0.8, y0 + w * 0.65, h + random.uniform(5, 12), m)
+            if random.random() < 0.2:
+                sky.cyl((x + w / 2, y0 + w * 0.4, h), (x + w / 2, y0 + w * 0.4, h + 16), 0.5, 0.0, m, n=5)
+            x += w + random.uniform(-3, 6)
+    # И по торцам улицы — чтобы в конце пути не было пустого горизонта
+    for xe in (X0 - 150, X1 + 150):
+        for k in range(10):
+            y = -150 + k * 32 + random.uniform(-6, 6)
+            w = random.uniform(12, 22)
+            sky.span(xe, y, 0, xe + w, y + w * 0.8, random.uniform(22, 70), M[random.choice(mats)])
     sky.build()
+
+
+# ---------- Работы в колодце: место, куда идёт игрок ----------
+
+def build_manhole_work():
+    """Открытый колодец кабельной канализации на газоне у тротуара. Один монтёр спускается по лестнице,
+    второй стоит у края с газоанализатором, пробоотборник опущен в колодец. Объекты item_* — карточки
+    задания «city» в public/walk-tasks.json"""
+    cx, cy = MANHOLE
+    c = V((cx, cy, 0))
+    INSPECT = 4.5  # объекты у люка видны карточками уже с края круга точки B
+    iron = mat("Чугун", "#3B3A38", rough=0.6, metal=0.4)
+    hole = mat("Проём колодца", "#0B0C0D", rough=1.0)
+    ladder = mat("Лестница колодца", "#9EA4AA", rough=0.4, metal=0.7)
+
+    # Колодец: горловина, тёмный проём, лестница, отложенная крышка
+    mb = MB("item_unfenced")
+    for k in range(16):  # кольцо из сегментов, чтобы проём остался открытым
+        a = 2 * math.pi * (k + 0.5) / 16
+        mb.box(c + V((math.cos(a) * 0.58, math.sin(a) * 0.58, 0.04)), (0.16, 0.25, 0.12), M["concrete"], rz=a)
+    mb.cyl(c + V((0, 0, -0.02)), c + V((0, 0, 0.004)), 0.52, 0.52, hole, n=20)
+    for s in (-1, 1):
+        mb.box(c + V((s * 0.2, -0.4, -0.75)), (0.05, 0.05, 3.5), ladder)
+    for k in range(10):
+        mb.box(c + V((0, -0.4, -2.4 + k * 0.33)), (0.4, 0.04, 0.04), ladder)
+    lid = c + V((-0.3, -1.35, 0))  # крышка отложена в сторону от изгороди, не на подходе к люку
+    mb.cyl(lid, lid + V((0, 0, 0.05)), 0.55, 0.55, iron, n=20)
+    for rz in (0.4, 0.4 + math.pi / 2):
+        mb.box(lid + V((0, 0, 0.06)), (0.9, 0.05, 0.025), iron, rz=rz)
+    mb.build(solid=True)["inspect_range"] = INSPECT
+
+    # Монтёр спускается: по грудь в колодце, лицом к лестнице, держится за поручни; каски нет
+    scale = 1.9 / 2.64  # рост как у игрока (build_worker.py)
+    meshes = place_model(WORKER_GLB, "item_no-harness+no-helmet", (cx, cy + 0.12), 0, scale=scale, base_z=-1.0,
+                         solid=False, smooth=True, inspect=INSPECT,
+                         drop=("hard_hat_dome", "helmet_brim", "helmet_front_rim"))
+    raise_arm(meshes, "1", 112, 0)
+    raise_arm(meshes, "-1", 98, 0)
+
+    # Второй монтёр у края с газоанализатором: лицом к колодцу (−X), обе руки держат прибор
+    rz = -math.pi / 2
+    name = "item_gas-check-ok+workwear-ok"
+    meshes = place_model(WORKER_GLB, name, (cx + 1.25, cy), rz, scale=scale, solid=True, smooth=True, inspect=INSPECT)
+    h1 = raise_arm(meshes, "1", 48, rz)
+    h2 = raise_arm(meshes, "-1", 48, rz)
+    dev = (h1 + h2) / 2 + V((-0.06, 0, 0.04))
+    analyzer = MB("gas_analyzer")
+    analyzer.box(dev, (0.12, 0.2, 0.26), M["hazard"])
+    analyzer.box(dev + V((-0.065, 0, 0.05)), (0.01, 0.14, 0.09), M["car_glass"])  # экран
+    analyzer.box(dev + V((-0.065, 0, -0.06)), (0.01, 0.12, 0.05), M["dark"])      # кнопки
+    tip = c + V((0.15, 0.05, 0.25))
+    analyzer.beam(dev + V((0, 0, -0.13)), tip, 0.02, 0.02, M["dark"])  # шланг пробоотборника
+    analyzer.beam(tip, c + V((0.1, 0.05, -1.6)), 0.02, 0.02, M["dark"])
+    analyzer.build(parent=bpy.data.objects[name])
+
+    # Инструмент у самого края люка
+    mb = MB("item_tools-edge")
+    t = c + V((0.15, 0.72, 0))
+    mb.box(t + V((0, 0, 0.13)), (0.5, 0.24, 0.26), M["red"], rz=0.2)
+    mb.box(t + V((0, 0, 0.27)), (0.2, 0.04, 0.03), M["dark"], rz=0.2)
+    mb.box(t + V((-0.55, -0.12, 0.02)), (0.3, 0.05, 0.03), M["metal"], rz=1.1)     # ключ
+    mb.box(t + V((0.45, -0.18, 0.03)), (0.32, 0.04, 0.04), M["wood"], rz=-0.5)     # молоток
+    mb.box(t + V((0.58, -0.25, 0.04)), (0.06, 0.14, 0.06), M["metal"], rz=-0.5)
+    mb.cyl(t + V((-0.2, 0.35, 0)), t + V((-0.2, 0.35, 0.18)), 0.22, 0.22, M["dark"], n=12)  # бухта кабеля
+    mb.build()["inspect_range"] = INSPECT
+
+    empty("spawn_A", (20.0, -11.0, 0))  # на газоне: прямой путь до колодца свободен от изгороди и скамеек
+    empty("goal_B", (cx - 2.1, cy, 0))  # у самого люка: отсюда видны карточки всех объектов
+    # Где может ходить игрок: ближний тротуар и газон до живой изгороди (на проезжую часть — нельзя)
+    empty("walk_min", (8, -15.0, 0))
+    empty("walk_max", (170, -3.4, 0))
 
 
 # ---------- Образцы машин и пешеходов (игра их клонирует) ----------
@@ -751,10 +867,10 @@ def build():
     build_business()
     build_construction()
     build_factory()
+    build_near_side()
     build_backdrop()
+    build_manhole_work()
     build_templates()
-    empty("cam_min", (20, 0, 0))
-    empty("cam_max", (166, 0, 0))
 
     bpy.ops.wm.save_as_mainfile(filepath=OUT_BLEND)
     bpy.ops.export_scene.gltf(filepath=OUT_GLB, export_format="GLB", export_extras=True, export_apply=True)

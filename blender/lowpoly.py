@@ -314,3 +314,78 @@ def tree(mb_trunk, mb_crown, kind, x, y, s=1.0, z=0.0):
                 a = random.uniform(0, 2 * math.pi)
                 p = base + V((math.cos(a) * r * 1.05, math.sin(a) * r * 1.05, h + random.uniform(-0.3, 0.6)))
                 mb_crown.blob(p, 0.09, M["apple"], seg=5, rings=3, bump=0)
+
+
+# ---------- Готовые модели из blender/assets ----------
+
+def base_name(o):
+    """Имя без суффикса .001: при повторном импорте той же модели Blender добавляет его к именам деталей"""
+    return o.name.split(".")[0]
+
+
+def unmirror_decal(o, center):
+    """Если наклейка (логотип, надпись) читается зеркально для зрителя снаружи, переворачивает её UV"""
+    me, mw = o.data, o.matrix_world
+    uv = me.uv_layers.active.data
+    poly = me.polygons[0]
+    loops = list(poly.loop_indices)
+    pts = [mw @ me.vertices[me.loops[i].vertex_index].co for i in loops]
+    us = [uv[i].uv.x for i in loops]
+    du = pts[us.index(max(us))] - pts[us.index(min(us))]
+    n = (mw.to_3x3() @ poly.normal).normalized()
+    c = sum(pts, V()) / len(pts)
+    if n.to_2d().dot((c - center).to_2d()) < 0:
+        n = -n
+    if du.dot((-n).cross(V((0, 0, 1)))) < 0:
+        for l in uv:
+            l.uv.x = 1 - l.uv.x
+
+
+def place_model(path, name, pos, rz, scale=1.0, base_z=0.0, solid=True, smooth=False, drop=(), inspect=None):
+    """Ставит готовую модель нижней точкой на высоту base_z в точку pos, повернув на rz вокруг вертикали.
+    Модели из blender/assets сохранены с осью Z вверх — поправляется поворотом. При rz = 0 сторона, которая
+    в файле смотрит на −Y, смотрит на −Y сцены. drop — базовые имена деталей, которые убрать;
+    smooth — гладкое затенение (иначе экспорт дробит каждую грань). Возвращает меши модели"""
+    before = set(bpy.data.objects)
+    bpy.ops.import_scene.gltf(filepath=path)
+    new = [o for o in bpy.data.objects if o not in before]
+    for o in [o for o in new if base_name(o) in drop]:
+        new.remove(o)
+        bpy.data.objects.remove(o)
+    root = empty(name, (*pos, 0))
+    root.rotation_euler = (rad(-90), 0, rz)
+    root.scale = (scale,) * 3
+    if solid:
+        root["solid"] = 1
+    if inspect:
+        root["inspect_range"] = inspect
+    for o in new:
+        if o.parent is None:
+            o.parent = root
+    bpy.context.view_layer.update()
+    meshes = [o for o in new if o.type == "MESH"]
+    root.location.z += base_z - min((o.matrix_world @ v.co).z for o in meshes for v in o.data.vertices)
+    bpy.context.view_layer.update()
+    center = root.matrix_world.translation
+    for o in meshes:
+        if "logo" in o.name.lower() and o.data.uv_layers:
+            unmirror_decal(o, center)
+        if smooth:
+            o.data.polygons.foreach_set("use_smooth", [True] * len(o.data.polygons))
+            o.data.set_sharp_from_angle(angle=rad(40))
+    return meshes
+
+
+def raise_arm(meshes, side, angle, rz):
+    """Поднимает руку модели монтёра вперёд на angle градусов вокруг плеча; side — «1» (левая) или «-1» (правая)"""
+    forward = V((math.sin(rz), -math.cos(rz), 0))
+    axis = forward.cross(V((0, 0, 1)))
+    arm = [o for o in meshes if base_name(o) in (f"upper_sleeve{side}", f"lower_sleeve{side}", f"hand{side}")]
+    pts = [o.matrix_world @ v.co for o in arm if base_name(o).startswith("upper") for v in o.data.vertices]
+    pivot = V((sum(p.x for p in pts) / len(pts), sum(p.y for p in pts) / len(pts), max(p.z for p in pts) - 0.03))
+    m = Matrix.Translation(pivot) @ Matrix.Rotation(rad(angle), 4, axis) @ Matrix.Translation(-pivot)
+    for o in arm:
+        o.matrix_world = m @ o.matrix_world
+    hand = next(o for o in arm if base_name(o).startswith("hand"))
+    hp = [hand.matrix_world @ v.co for v in hand.data.vertices]
+    return sum(hp, V()) / len(hp)  # где теперь кисть — чтобы вложить в неё предмет

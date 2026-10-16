@@ -10,14 +10,13 @@ const isEditor = /^\/editor\/?$/.test(location.pathname) || location.hash === '#
 // Прототип 3D-режима ходьбы: /walk (или #walk)
 const Walk3DScreen = lazy(() => import('./screens/Walk3DScreen'))
 const isWalk = /^\/walk\/?$/.test(location.pathname) || location.hash === '#walk'
-// Локация 2 «Город»: /city (или #city); открывается после локации 1
-const CityScreen = lazy(() => import('./screens/CityScreen'))
+// Локация 2 «Город»: /city (или #city) — тот же режим ходьбы со сценой city; открывается после локации 1
 const isCity = /^\/city\/?$/.test(location.pathname) || location.hash === '#city'
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     {isEditor || isWalk || isCity ? (
-      <Suspense fallback={null}>{isEditor ? <EditorScreen /> : isCity ? <CityScreen /> : <Walk3DScreen />}</Suspense>
+      <Suspense fallback={null}>{isEditor ? <EditorScreen /> : <Walk3DScreen />}</Suspense>
     ) : (
       <App />
     )}

@@ -1,29 +1,54 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Building2, Flag, Info, Search, X } from 'lucide-react'
+import { Building2, Flag, Info, Lock, Search, X } from 'lucide-react'
 import { config } from '../config'
 import { Header } from '../components/Header'
 import { ListCards } from '../components/ListCards'
 import { ReviewList } from '../components/ReviewList'
-import { saveLoc1Result } from '../lib/progress'
+import { cityAmbient } from '../city/ambient'
+import { isCityUnlocked, saveLoc1Result } from '../lib/progress'
 import { scoreTask } from '../lib/scoring'
-import { WalkEngine } from '../walk/engine'
+import { WalkEngine, type WalkOptions } from '../walk/engine'
 import type { Task, TaskResult } from '../types'
 
 /**
- * Режим ходьбы (/walk): 3D-сцена из Blender, игрок идёт от точки A к точке B,
+ * Режим ходьбы (/walk, город — /city): 3D-сцена из Blender, игрок идёт от точки A к точке B,
  * по пути осматривает объекты и отмечает нарушения. Карточки и баллы — в формате tasks.json.
  * Объекты сцены с именем item_<id> соответствуют карточкам задания с тем же id.
  */
 
 /** Задание и маршрут для каждой сцены; number — номер в заголовке окна «Ситуация N». Задания режима ходьбы лежат
  *  отдельно (walk-tasks.json), чтобы не попасть в основной тренажёр с картинками */
-const SCENES: Record<string, { tasksUrl: string; taskId: string; title: string; route: string; number?: number }> = {
+interface SceneConfig {
+  tasksUrl: string
+  taskId: string
+  title: string
+  route: string
+  number?: number
+  /** Настройки движка для большой сцены (туман, дальность, «живая» улица) */
+  options?: WalkOptions
+  /** Сцена закрыта, пока не пройдена предыдущая */
+  locked?: () => boolean
+}
+
+const SCENES: Record<string, SceneConfig> = {
   // Сцена 1 — сельская улица с КТПН (готова 15.10.2026)
   landscape: { number: 1, tasksUrl: '/walk-tasks.json', taskId: 'landscape', title: 'Улица у КТПН', route: 'Пройдите по улице от точки A мимо КТПН до фургона (B).' },
+  // Локация 2 — город: колодец связи у оживлённой улицы; открывается после локации 1
+  city: {
+    number: 2,
+    tasksUrl: '/walk-tasks.json',
+    taskId: 'city',
+    title: 'Колодец у городской улицы',
+    route: 'Дойдите от точки A до открытого колодца (B).',
+    options: { fog: [60, 260], far: 700, sunFollow: true, ambient: cityAmbient },
+    locked: () => !isCityUnlocked(),
+  },
   t1: { tasksUrl: config.tasksUrl, taskId: 't1', title: 'Опора у сельской АТС', route: 'Дойдите от фургона (A) до опоры (B).' },
 }
 /** По умолчанию ландшафт; другую сцену можно выбрать параметром: /walk?scene=t1 → /models/t1.glb */
-const SCENE_NAME = new URLSearchParams(location.search).get('scene')?.replace(/[^\w-]/g, '') || 'landscape'
+const PARAMS = new URLSearchParams(location.search)
+const IS_CITY = /^\/city\/?$/.test(location.pathname) || location.hash === '#city'
+const SCENE_NAME = IS_CITY ? 'city' : PARAMS.get('scene')?.replace(/[^\w-]/g, '') || 'landscape'
 const SCENE = SCENES[SCENE_NAME] ?? SCENES.landscape
 const SCENE_URL = `/models/${SCENE_NAME}.glb`
 const WORKER_URL = '/models/worker.glb'
@@ -31,6 +56,34 @@ const WORKER_URL = '/models/worker.glb'
 const GOAL_RADIUS = 2
 
 export default function Walk3DScreen() {
+  // В режиме разработки закрытую сцену можно открыть ссылкой ?open
+  const locked = !!SCENE.locked?.() && !(import.meta.env.DEV && PARAMS.has('open'))
+  return locked ? <Locked /> : <WalkGame />
+}
+
+function Locked() {
+  return (
+    <div className="flex h-dvh flex-col">
+      <Header onExit={() => (location.href = '/')} />
+      <div className="flex flex-1 items-center justify-center bg-[#a9d6f5] p-4">
+        <div className="w-full max-w-md rounded-2xl bg-white p-6 text-center shadow-2xl">
+          <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-page text-navy">
+            <Lock className="h-6 w-6" />
+          </div>
+          <h2 className="text-lg font-bold text-navy">Локация {SCENE.number} «Город» пока закрыта</h2>
+          <p className="mt-2 text-sm leading-relaxed text-muted">
+            Она откроется после прохождения локации 1 с результатом не ниже {config.passThresholdPercent}%.
+          </p>
+          <a href="/walk" className="mt-5 block rounded-[10px] bg-action py-2.5 font-semibold text-white transition hover:bg-action-dark">
+            Пройти локацию 1
+          </a>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function WalkGame() {
   const mountRef = useRef<HTMLDivElement>(null)
   const engineRef = useRef<WalkEngine | null>(null)
   const [task, setTask] = useState<Task | null>(null)
@@ -76,7 +129,7 @@ export default function Walk3DScreen() {
       },
       onReady: () => setStatus('ready'),
       onError: (m) => setStatus(m),
-    })
+    }, SCENE.options)
     engineRef.current = engine
     return () => engine.dispose()
   }, [toggle])

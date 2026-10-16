@@ -11,8 +11,6 @@ const KEY = 'biot.progress.v1'
 interface Progress {
   /** Лучший результат локации 1, % */
   loc1Best?: number
-  /** Ответы в городе: id вопроса → номер выбранного варианта */
-  cityAnswers?: Record<string, number>
 }
 
 const load = (): Progress => loadDraft<Progress>(KEY) ?? {}
@@ -30,8 +28,3 @@ export function isCityUnlocked(): boolean {
   return (load().loc1Best ?? 0) >= config.passThresholdPercent
 }
 
-export const loadCityAnswers = (): Record<string, number> => load().cityAnswers ?? {}
-
-export function saveCityAnswers(answers: Record<string, number>) {
-  save({ ...load(), cityAnswers: answers })
-}
