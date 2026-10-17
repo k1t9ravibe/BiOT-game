@@ -1,8 +1,9 @@
 """
-Сельский ландшафт для режима ходьбы: рельеф, грунтовая дорога, трава, дом с двором, заборы, лестница, деревья,
+Сельский ландшафт для режима ходьбы: рельеф, грунтовая дорога, трава, усадьба, заборы, деревья,
 ВЛ 10 кВ вдоль дороги (бетонные опоры, изоляторы, провода).
-Фургон, КТПН с монтёром, сумка с огнетушителем и посторонние берутся готовыми из blender/assets (furgonkt_van.glb,
-ktpn_monter.glb, sumka_ognetushitel.glb, muzhik_pes_pacan.glb — их готовят prep_furgon.py, prep_ktpn.py, prep_static.py).
+Фургон, КТПН с монтёром, сумка с огнетушителем, посторонние и усадьба берутся готовыми из blender/assets
+(furgonkt_van.glb, ktpn_monter.glb, sumka_ognetushitel.glb, muzhik_pes_pacan.glb, dom_usadba.glb —
+их готовят prep_furgon.py, prep_ktpn.py, prep_static.py).
 АТС и людей сюда не ставим: их добавляют вручную в Blender, места помечены пустышками place_*.
 
 Запуск (из корня проекта):
@@ -35,6 +36,7 @@ VAN_GLB = os.path.join(ROOT, "blender", "assets", "furgonkt_van.glb")
 KTPN_GLB = os.path.join(ROOT, "blender", "assets", "ktpn_monter.glb")
 SUMKA_GLB = os.path.join(ROOT, "blender", "assets", "sumka_ognetushitel.glb")
 MUZHIK_GLB = os.path.join(ROOT, "blender", "assets", "muzhik_pes_pacan.glb")
+DOM_GLB = os.path.join(ROOT, "blender", "assets", "dom_usadba.glb")
 
 random.seed(7)
 rad = math.radians
@@ -43,9 +45,11 @@ SIZE = 160        # сторона участка земли, м
 CELLS = 140       # клеток сетки рельефа по стороне
 FLAT = 30         # до этого расстояния от центра земля строго ровная
 ROAD_Y = -10      # ось грунтовой дороги (идёт вдоль X)
-PATH_X = 10.25    # тропинка от дороги к калитке и крыльцу
-YARD = (3, 0, 19, 15)  # двор: x0, y0, x1, y1
-GATE = (9.5, 11.0)     # проём калитки по X на передней стороне двора
+# Усадьба dom_usadba.glb (дом, сарай, колодец, грядки, забор) 16 × 16,2 м, крыльцом к дороге. Травяная подложка
+# модели толщиной ~0,27 м утоплена в землю. Передний край забора неровный, ближе всего к дороге — y ≈ 0,3
+DOM_POS = (11.0, 8.4)
+DOM_SINK = 0.27
+YARD = (3.0, 0.3, 19.0, 16.5)  # участок усадьбы: x0, y0, x1, y1
 CAR_POS = (-2.0, ROAD_Y + 3.4)  # фургон на обочине вдоль дороги, у него — точка B
 KTPN_POS = (-13.0, -2.4)  # КТПН у дороги, левее фургона, ~20 м от дома, двери к дороге
 # Фасад и правый край корпуса КТПН: от них стоят сумка с огнетушителем и посторонние. Корпус ktpn_monter.glb
@@ -308,8 +312,6 @@ def build_ground():
             # Под дорогой — грунт (сама колея — отдельный объект road)
             road = abs(y - ROAD_Y) + 0.5 * nz(x, y, 3, 5.5)
             c = lerp(DIRT, c, smooth(2.0, 3.4, road))
-            # Утоптанная земля у калитки
-            c = lerp(DIRT_GRASS, c, smooth(1.0, 2.5, math.hypot(x - PATH_X, y + 0.3)))
             pts.append((x, y, h))
             cols.append(c)
     faces = [(j * n + i, j * n + i + 1, (j + 1) * n + i + 1, (j + 1) * n + i) for j in range(CELLS) for i in range(CELLS)]
@@ -342,13 +344,7 @@ def build_road():
 def blocked_for_grass(x, y):
     if abs(y - ROAD_Y) < 2.6:
         return True
-    if 6.3 < x < 15.6 and 4.0 < y < 12.8:   # дом с крыльцом
-        return True
-    if 15.6 < x < 18.4 and 10.8 < y < 14.2:  # сарай
-        return True
-    if abs(x - PATH_X) < 0.8 and -8 < y < 4.6:  # тропинка
-        return True
-    if 14.3 < x < 18.4 and 0.7 < y < 4.1:   # грядки
+    if YARD[0] < x < YARD[2] and YARD[1] < y < YARD[3]:  # усадьба — у неё своя трава
         return True
     if abs(x - CAR_POS[0]) < 2.9 and abs(y - CAR_POS[1]) < 1.25:  # место машины, трава не пробьёт кузов
         return True
@@ -381,10 +377,8 @@ def build_grass():
         tuft(x, y, 0.15, 0.4, 4, light)
         placed += 1
 
-    # Высокая трава вдоль заборов и обочин
-    x0, y0, x1, y1 = YARD
-    lines = [((x0, y0), (GATE[0], y0)), ((GATE[1], y0), (x1, y0)), ((x0, y0), (x0, y1)), ((x1, y0), (x1, y1)),
-             ((x0, y1), (x1, y1)), ((-30, ROAD_Y - 3.6), (30, ROAD_Y - 3.6)), ((-30, ROAD_Y + 2.9), (30, ROAD_Y + 2.9))]
+    # Высокая трава вдоль обочин
+    lines = [((-30, ROAD_Y - 3.6), (30, ROAD_Y - 3.6)), ((-30, ROAD_Y + 2.9), (30, ROAD_Y + 2.9))]
     for (ax, ay), (bx, by) in lines:
         length = math.hypot(bx - ax, by - ay)
         for _ in range(int(length * 4)):
@@ -399,7 +393,7 @@ def build_grass():
     placed = 0
     while placed < 260:
         x, y = random.uniform(-30, 30), random.uniform(-30, 30)
-        if blocked_for_grass(x, y) or (YARD[0] < x < YARD[2] and YARD[1] < y < YARD[3]):
+        if blocked_for_grass(x, y):
             continue
         z, h, s = height(x, y), random.uniform(0.25, 0.45), random.uniform(0.05, 0.08)
         c = random.choice(heads)
@@ -410,159 +404,7 @@ def build_grass():
     return mb.build(recalc=False)
 
 
-# ---------- Дом ----------
-
-def window(mb, p, n, t, zc, w=1.0, h=1.2, shutters=True):
-    """Окно на стене: p — точка на поверхности стены (x, y), n — наружу, t — вдоль стены"""
-    n, t = V(n), V(t)
-    axes = (t, V((0, 0, 1)).cross(t), V((0, 0, 1)))
-    at = lambda along, out, z: V((p[0], p[1], z)) + t * along + n * out
-    mb.box(at(0, 0.02, zc), (w, 0.04, h), M["glass"], axes=axes)
-    # Рама, перекладины, подоконник, наличник сверху
-    mb.box(at(0, 0.05, zc + h / 2 + 0.04), (w + 0.16, 0.08, 0.08), M["trim"], axes=axes)
-    mb.box(at(0, 0.08, zc - h / 2 - 0.03), (w + 0.3, 0.16, 0.06), M["trim"], axes=axes)
-    for s in (-1, 1):
-        mb.box(at(s * (w / 2 + 0.04), 0.05, zc), (0.08, 0.08, h + 0.16), M["trim"], axes=axes)
-    mb.box(at(0, 0.04, zc), (0.05, 0.06, h), M["trim"], axes=axes)
-    mb.box(at(0, 0.04, zc + h * 0.22), (w, 0.06, 0.05), M["trim"], axes=axes)
-    mb.box(at(0, 0.06, zc + h / 2 + 0.2), (w + 0.4, 0.06, 0.2), M["trim"], axes=axes)
-    if shutters:
-        for s in (-1, 1):
-            mb.box(at(s * (w / 2 + 0.33), 0.05, zc), (0.5, 0.04, h + 0.12), M["shutter"], axes=axes)
-            mb.box(at(s * (w / 2 + 0.33), 0.08, zc), (0.36, 0.02, 0.06), M["trim"], axes=axes)
-
-
-def gable(mb, x, xo, y0, y1, z0, z1, material):
-    """Треугольный фронтон между x и xo (толщина) над стеной y0..y1"""
-    ym = (y0 + y1) / 2
-    pts = [(x, y0, z0), (x, y1, z0), (x, ym, z1), (xo, y0, z0), (xo, y1, z0), (xo, ym, z1)]
-    mb.poly(pts, [(0, 1, 2), (3, 5, 4), (0, 3, 4, 1), (1, 4, 5, 2), (2, 5, 3, 0)], material)
-
-
-def build_house():
-    """Сельский дом 8×6 м: побелённые стены, синие ставни, двускатная крыша, крыльцо с навесом"""
-    mb = MB("wall_house")
-    x0, x1, y0, y1 = 7.0, 15.0, 6.0, 12.0
-    cx, cy = (x0 + x1) / 2, (y0 + y1) / 2
-    wall_top, eave, ridge, over = 3.0, 2.75, 4.75, 0.6
-
-    mb.box((cx, cy, 0.25), (x1 - x0 + 0.24, y1 - y0 + 0.24, 0.5), M["plinth"])
-    mb.box((cx, cy, (0.4 + wall_top) / 2), (x1 - x0, y1 - y0, wall_top - 0.4), M["plaster"])
-
-    # Крыша: два ската, конёк, фронтоны с чердачным окном
-    for ye in (y0 - over, y1 + over):
-        mb.beam((cx, ye, eave), (cx, cy, ridge), x1 - x0 + 2 * over, 0.12, M["roof"], side=(1, 0, 0))
-    mb.beam((x0 - over, cy, ridge + 0.04), (x1 + over, cy, ridge + 0.04), 0.28, 0.16, M["roof"])
-    for x, xo, s in ((x0, x0 + 0.15, -1), (x1, x1 - 0.15, 1)):
-        gable(mb, x - s * 0.02, xo, y0, y1, wall_top, ridge - 0.12, M["gable"])
-        window(mb, (x - s * 0.02, cy), (s, 0, 0), (0, 1, 0), 3.65, w=0.55, h=0.55, shutters=False)
-
-    # Окна: три на фасаде, по одному сбоку, два сзади
-    for wx in (8.3, 10.2, 14.0):
-        window(mb, (wx, y0), (0, -1, 0), (1, 0, 0), 1.75)
-    window(mb, (x0, 10.3), (-1, 0, 0), (0, 1, 0), 1.75)
-    window(mb, (x1, 8.5), (1, 0, 0), (0, 1, 0), 1.75)
-    for wx in (9.0, 13.0):
-        window(mb, (wx, y1), (0, 1, 0), (1, 0, 0), 1.75)
-
-    # Дверь и крыльцо с навесом
-    dx = 12.1
-    mb.box((dx, y0 - 0.03, 1.5), (1.0, 0.06, 2.0), M["door"])
-    mb.box((dx + 0.35, y0 - 0.08, 1.45), (0.06, 0.06, 0.12), M["trim"])
-    for s in (-1, 1):
-        mb.box((dx + s * 0.56, y0 - 0.05, 1.55), (0.1, 0.08, 2.1), M["trim"])
-    mb.box((dx, y0 - 0.05, 2.62), (1.22, 0.08, 0.1), M["trim"])
-    mb.box((dx, y0 - 0.7, 0.25), (1.9, 1.4, 0.5), M["concrete"])
-    mb.box((dx, y0 - 1.55, 0.165), (1.9, 0.3, 0.33), M["concrete"])
-    mb.box((dx, y0 - 1.85, 0.085), (1.9, 0.3, 0.17), M["concrete"])
-    for s in (-1, 1):
-        mb.box((dx + s * 0.85, y0 - 1.3, 1.55), (0.1, 0.1, 2.1), M["wood"])
-    mb.beam((dx, y0, 2.68), (dx, y0 - 1.55, 2.5), 2.1, 0.08, M["roof"], side=(1, 0, 0))
-
-    # Скамейка у стены, труба
-    for bx in (8.65, 9.85):
-        mb.box((bx, y0 - 0.3, 0.22), (0.08, 0.3, 0.44), M["wood_dark"])
-    mb.box((9.25, y0 - 0.3, 0.46), (1.6, 0.36, 0.05), M["wood"])
-    mb.box((9.5, 10.2, 4.45), (0.5, 0.5, 1.9), M["brick"])
-    mb.box((9.5, 10.2, 5.43), (0.62, 0.62, 0.08), M["concrete"])
-    return mb.build(solid=True)
-
-
-def build_shed():
-    """Дощатый сарай с односкатной крышей"""
-    mb = MB("wall_shed")
-    x0, x1, y0, y1 = 15.8, 18.2, 11.0, 14.0
-    mb.box(((x0 + x1) / 2, (y0 + y1) / 2, 1.1), (x1 - x0, y1 - y0, 2.2), M["wood_dark"])
-    for i in range(9):  # доски обшивки на фасаде
-        mb.box((x0 + 0.13 + i * 0.27, y0 - 0.02, 1.1), (0.2, 0.03, 2.2), M["wood"])
-    mb.beam(((x0 + x1) / 2, y0 - 0.4, 2.55), ((x0 + x1) / 2, y1 + 0.3, 2.15), x1 - x0 + 0.5, 0.06, M["roof_shed"], side=(1, 0, 0))
-    mb.box((16.6, y0 - 0.05, 0.95), (0.9, 0.04, 1.9), M["wood_old"])
-    mb.box((16.95, y0 - 0.09, 1.0), (0.08, 0.04, 0.2), M["plinth"])
-    return mb.build(solid=True)
-
-
-def build_ladder():
-    """Деревянная лестница 3.5 м приставлена к боковой стене дома под углом 75°"""
-    mb = MB("ladder")
-    length, angle, wall_x, y = 3.5, rad(75), 7.0, 7.6
-    run, rise = length * math.cos(angle), length * math.sin(angle)
-    for s in (-1, 1):
-        mb.beam((wall_x - run, y + s * 0.24, 0), (wall_x - 0.04, y + s * 0.24, rise), 0.07, 0.05, M["ladder"], side=(0, 1, 0))
-    for k in range(1, 12):
-        t = k * 0.3 / length
-        x, z = wall_x - run + run * t, rise * t
-        mb.beam((x, y - 0.24, z), (x, y + 0.24, z), 0.045, 0.045, M["ladder"])
-    return mb.build(solid=True)
-
-
-def build_yard_details():
-    """Дорожка из плит, грядки, поленница"""
-    mb = MB("yard")
-    y = -8.0
-    while y < 4.3:
-        mb.box((PATH_X + random.uniform(-0.08, 0.08), y, 0.02), (random.uniform(0.6, 0.75), random.uniform(0.38, 0.48), 0.04),
-               M["stone"], rz=random.uniform(-0.12, 0.12))
-        y += 0.55
-    for by in (1.2, 2.4, 3.6):
-        mb.box((16.35, by, 0.08), (3.6, 0.8, 0.16), M["soil"])
-        for k in range(10):
-            sx = 14.8 + k * 0.35
-            mb.cyl((sx, by, 0.16), (sx + random.uniform(-0.04, 0.04), by, 0.32), 0.05, 0, M["sprout"], n=4)
-    for row in range(4):
-        for k in range(7 - row):
-            x = 16.7 + k * 0.26 + row * 0.13
-            z = 0.12 + row * 0.22
-            mb.cyl((x, 7.4, z), (x, 8.7, z), 0.12, 0.12, M["wood"] if (k + row) % 3 else M["wood_old"], n=7)
-    return mb.build(solid=False)
-
-
 # ---------- Заборы (каждый прямой участок — отдельный объект, чтобы коллизия была узкой) ----------
-
-def picket_fence(name, a, b):
-    """Штакетник: столбы, две прожилины, острые штакетины"""
-    mb = MB(name)
-    a, b = V((*a, 0)), V((*b, 0))
-    d = b - a
-    length = d.length
-    t = d.normalized()
-    n = V((0, 0, 1)).cross(t)
-    posts = max(1, round(length / 2.4))
-    for k in range(posts + 1):
-        p = a + t * (length * k / posts)
-        mb.box(p + V((0, 0, 0.7)), (0.1, 0.1, 1.4), M["wood_dark"], rz=math.atan2(t.y, t.x))
-    for z in (0.35, 1.05):
-        mb.beam(a + n * 0.07 + V((0, 0, z)), b + n * 0.07 + V((0, 0, z)), 0.08, 0.04, M["wood"])
-    count = int(length / 0.17)
-    for k in range(count):
-        p = a + t * (0.085 + k * 0.17) + n * 0.1
-        h = 1.25 + 0.03 * math.sin(k * 1.7)
-        w = 0.045
-        prof = [(-w, 0.08), (w, 0.08), (w, h), (0, h + 0.07), (-w, h)]
-        pts = [p + t * u + V((0, 0, z)) + n * off for off in (-0.012, 0.012) for (u, z) in prof]
-        faces = [(0, 1, 2, 3, 4), (9, 8, 7, 6, 5)] + [(i, (i + 1) % 5, 5 + (i + 1) % 5, 5 + i) for i in range(5)]
-        mb.poly(pts, faces, M["picket"])
-    return mb.build()
-
 
 def board_fence(name, a, b):
     """Сплошной дощатый забор 1.8 м"""
@@ -603,26 +445,6 @@ def rail_fence(name, a, b):
 
 
 def build_fences():
-    x0, y0, x1, y1 = YARD
-    picket_fence("wall_fence_front_l", (x0, y0), (GATE[0], y0))
-    picket_fence("wall_fence_front_r", (GATE[1], y0), (x1, y0))
-    picket_fence("wall_fence_left", (x0, y1), (x0, y0))
-    picket_fence("wall_fence_right", (x1, y0), (x1, y1))
-    picket_fence("wall_fence_back", (x1, y1), (x0, y1))
-
-    # Калитка открыта внутрь двора, сквозь неё можно пройти
-    mb = MB("gate")
-    hinge = V((GATE[0] + 0.05, y0 + 0.05, 0))
-    t = V((math.cos(rad(80)), math.sin(rad(80)), 0))
-    n = V((0, 0, 1)).cross(t)
-    w = GATE[1] - GATE[0] - 0.15
-    for z in (0.35, 1.05):
-        mb.beam(hinge + V((0, 0, z)), hinge + t * w + V((0, 0, z)), 0.08, 0.04, M["wood"])
-    for k in range(int(w / 0.17)):
-        p = hinge + t * (0.08 + k * 0.17) + n * 0.03
-        mb.box(p + V((0, 0, 0.7)), (0.09, 0.024, 1.25), M["picket"], rz=math.atan2(t.y, t.x))
-    mb.build()
-
     # Глухой забор соседнего участка и жерди вдоль дороги
     board_fence("wall_fence_neighbor_1", (-24, 18), (-12, 18))
     board_fence("wall_fence_neighbor_2", (-12, 18), (0, 18))
@@ -666,7 +488,7 @@ def tree(mb_trunk, mb_crown, kind, x, y, s=1.0):
 def build_trees():
     # Рядом с игроком: у каждого дерева свой ствол-препятствие, кроны общим объектом
     near = [("birch", -16, 12), ("birch", -19, 4), ("tree", 22.5, 4), ("birch", 22, 15), ("tree", -14, -20),
-            ("birch", 15, -19), ("apple", 5.0, 2.6), ("apple", 4.8, 12.8), ("tree", -21, 21), ("pine", 21, -21)]
+            ("birch", 15, -19), ("tree", -21, 21), ("pine", 21, -21)]
     crowns = MB("tree_crowns")
     for i, (kind, x, y) in enumerate(near):
         trunk = MB(f"wall_trunk_{i}")
@@ -689,9 +511,9 @@ def build_trees():
     far_t.build()
     far_c.build()
 
-    # Кусты вдоль соседского забора и у дома
+    # Кусты вдоль соседского забора
     bushes = MB("bushes")
-    for x, y in [(-22, 16.8), (-18.5, 16.9), (-9, 16.8), (-4, 16.7), (3.8, 5.8), (18.2, 6.0), (6.2, 13.9)]:
+    for x, y in [(-22, 16.8), (-18.5, 16.9), (-9, 16.8), (-4, 16.7)]:
         for _ in range(3):
             bushes.blob((x + random.uniform(-0.5, 0.5), y + random.uniform(-0.3, 0.3), 0.4), random.uniform(0.5, 0.75),
                         M["leaf"], scale=(1.2, 1, 0.8))
@@ -882,10 +704,6 @@ def build():
     build_ground()
     build_road()
     build_grass()
-    build_house()
-    build_shed()
-    build_ladder()
-    build_yard_details()
     build_fences()
     build_trees()
     build_far_houses()
@@ -900,6 +718,7 @@ def build():
     empty("place_ats", (-8.0, 7.0, 0))
     # Объекты задания «Улица у КТПН» (public/walk-tasks.json) называются item_<id карточки>
     place_model(VAN_GLB, "item_van-ok", CAR_POS, math.pi)  # мордой по +X вдоль дороги
+    place_model(DOM_GLB, "wall_dom_usadba", DOM_POS, 0, base_z=-DOM_SINK, fit_logos=False)  # крыльцом к дороге
     # КТПН дверями к дороге, вокруг нет ограждения. Монтёр — часть той же модели, поэтому один объект на четыре
     # карточки: не ограждена зона, без каски и в одиночку (нарушения), в диэлектрических ботах (правильно)
     place_model(KTPN_GLB, "item_zone-unfenced+no-helmet+alone+boots-ok", (KTPN_RIGHT_X, KTPN_FRONT_Y), 0,
