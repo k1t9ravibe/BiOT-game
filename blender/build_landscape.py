@@ -1,7 +1,7 @@
 """
 Сельский ландшафт для режима ходьбы: рельеф, грунтовая дорога, трава, дом с двором, заборы, лестница, деревья,
 ВЛ 10 кВ вдоль дороги (бетонные опоры, изоляторы, провода).
-Фургон и КТПН берутся готовыми из blender/assets (kazakhtelecom_faceted_van.glb, kazakhtelecom_substation_no_signs.glb).
+Фургон и КТПН берутся готовыми из blender/assets (furgonkt_van.glb — его готовит prep_furgon.py, kazakhtelecom_substation_no_signs.glb).
 АТС и людей сюда не ставим: их добавляют вручную в Blender, места помечены пустышками place_*.
 
 Запуск (из корня проекта):
@@ -30,7 +30,7 @@ from mathutils import noise
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 OUT_GLB = os.path.join(ROOT, "public", "models", "landscape.glb")
 OUT_BLEND = os.path.join(ROOT, "blender", "landscape_base.blend")
-VAN_GLB = os.path.join(ROOT, "blender", "assets", "kazakhtelecom_faceted_van.glb")
+VAN_GLB = os.path.join(ROOT, "blender", "assets", "furgonkt_van.glb")
 KTPN_GLB = os.path.join(ROOT, "blender", "assets", "kazakhtelecom_substation_no_signs.glb")
 WORKER_GLB = os.path.join(ROOT, "blender", "assets", "kazakhtelecom_worker_rounded_realistic.glb")
 
@@ -342,7 +342,7 @@ def blocked_for_grass(x, y):
         return True
     if 14.3 < x < 18.4 and 0.7 < y < 4.1:   # грядки
         return True
-    if abs(x - CAR_POS[0]) < 2.9 and abs(y - CAR_POS[1]) < 1.1:  # место машины, трава не пробьёт кузов
+    if abs(x - CAR_POS[0]) < 2.9 and abs(y - CAR_POS[1]) < 1.25:  # место машины, трава не пробьёт кузов
         return True
     if -4.0 < x - KTPN_POS[0] < 3.3 and abs(y - KTPN_POS[1]) < 2.8:  # КТПН
         return True
