@@ -15,6 +15,7 @@ import math
 import os
 import tempfile
 
+import bmesh
 import bpy
 import numpy as np
 from mathutils import Matrix
@@ -45,6 +46,18 @@ def load_van():
     bpy.context.view_layer.objects.active = o
     o.select_set(True)
     bpy.ops.object.transform_apply(location=True, rotation=True, scale=True)  # импорт кладёт поворот Y→Z в объект
+
+    # glTF хранит меш разрезанным по швам развёртки, и упрощение двигает края островков UV в тёмные щели атласа —
+    # на кузове появляются чёрные треугольники. Склеиваем вершины и помечаем швы, тогда упрощение их бережёт
+    bm = bmesh.new()
+    bm.from_mesh(o.data)
+    bmesh.ops.remove_doubles(bm, verts=bm.verts, dist=1e-6)
+    bm.to_mesh(o.data)
+    bm.free()
+    bpy.ops.object.mode_set(mode="EDIT")
+    bpy.ops.mesh.select_all(action="SELECT")
+    bpy.ops.uv.seams_from_islands()
+    bpy.ops.object.mode_set(mode="OBJECT")
 
     m = o.modifiers.new("decimate", "DECIMATE")
     m.ratio = DECIMATE
@@ -171,7 +184,7 @@ def side_texels(me, w, h):
     out = []
     for t in me.loop_triangles:
         P = np.array([me.vertices[i].co for i in t.vertices])
-        if abs(t.normal.y) < 0.7 or np.abs(P[:, 1]).min() < 0.9:
+        if abs(t.normal.y) < 0.5 or np.abs(P[:, 1]).min() < 0.85:
             continue
         if P[:, 0].max() < DECAL_X[0] - f or P[:, 0].min() > DECAL_X[1] + f:
             continue
@@ -186,11 +199,36 @@ def side_texels(me, w, h):
         q = np.stack([cx.ravel(), cy.ravel()], 1)
         l12 = np.linalg.solve(m, (q + 0.5 - U[0]).T).T
         bary = np.column_stack([1 - l12.sum(1), l12])
-        ok = (bary >= -0.03).all(1)  # с запасом, чтобы на швах UV не оставалось старых букв
+        # С запасом в полтора пикселя за край треугольника, чтобы на швах UV не оставалось старых букв:
+        # bary_i × высота треугольника из вершины i — расстояние до противоположной стороны в пикселях
+        area2 = abs(np.linalg.det(m))
+        heights = area2 / np.linalg.norm(U[[1, 2, 0]] - U[[2, 0, 1]], axis=1)
+        ok = (bary * heights >= -1.5).all(1)
         if ok.any():
             out.append(np.column_stack([q[ok], bary[ok] @ P]))
     T = np.concatenate(out)
     return T[(T[:, 0] >= 0) & (T[:, 0] < w) & (T[:, 1] >= 0) & (T[:, 1] < h)]
+
+
+def flatten_panels(o):
+    """Под старыми логотипом и надписью упрощённая обшивка осталась бугристой, и на новой наклейке видны тени.
+    Вершины борта в зоне наклейки кладём на гладкую поверхность y = a + b·x + c·z + d·z², подогнанную по панели"""
+    me = o.data
+    co = np.empty(len(me.vertices) * 3, np.float32)
+    me.vertices.foreach_get("co", co)
+    co = co.reshape(-1, 3)
+    x, y, z = co.T
+    f = 3 * FEATHER
+    edge = np.minimum.reduce([x - DECAL_X[0], DECAL_X[1] - x, z - DECAL_Z[0], DECAL_Z[1] - z])
+    for s in (1, -1):
+        sel = (s * y > 0.95) & (edge > -2 * f)
+        A = np.column_stack([np.ones(sel.sum()), x[sel], z[sel], z[sel] ** 2])
+        coef = np.linalg.lstsq(A, y[sel], rcond=None)[0]
+        wgt = np.clip(edge[sel] / f + 1, 0, 1)
+        y[sel] += wgt * (A @ coef - y[sel])
+    me.vertices.foreach_set("co", co.ravel())
+    me.update()
+    bpy.ops.object.shade_smooth_by_angle(angle=math.radians(40))
 
 
 def paint_decal(o, mask, blue):
@@ -224,6 +262,7 @@ def build():
     logo, blue = logo_mask()
     mask = decal_mask(text, logo)
     o = load_van()
+    flatten_panels(o)
     paint_decal(o, mask, blue)
 
     # export_yup=False — как у остальных моделей в blender/assets: place_model ставит их поворотом на −90° по X
