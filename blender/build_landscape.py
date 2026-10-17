@@ -1,7 +1,8 @@
 """
 Сельский ландшафт для режима ходьбы: рельеф, грунтовая дорога, трава, дом с двором, заборы, лестница, деревья,
 ВЛ 10 кВ вдоль дороги (бетонные опоры, изоляторы, провода).
-Фургон и КТПН берутся готовыми из blender/assets (furgonkt_van.glb и ktpn1.glb — их готовят prep_furgon.py и prep_ktpn.py).
+Фургон, КТПН и монтёр берутся готовыми из blender/assets (furgonkt_van.glb, ktpn1.glb, monter_wires.glb —
+их готовят prep_furgon.py, prep_ktpn.py, prep_monter.py).
 АТС и людей сюда не ставим: их добавляют вручную в Blender, места помечены пустышками place_*.
 
 Запуск (из корня проекта):
@@ -32,7 +33,7 @@ OUT_GLB = os.path.join(ROOT, "public", "models", "landscape.glb")
 OUT_BLEND = os.path.join(ROOT, "blender", "landscape_base.blend")
 VAN_GLB = os.path.join(ROOT, "blender", "assets", "furgonkt_van.glb")
 KTPN_GLB = os.path.join(ROOT, "blender", "assets", "ktpn1.glb")
-WORKER_GLB = os.path.join(ROOT, "blender", "assets", "kazakhtelecom_worker_rounded_realistic.glb")
+MONTER_GLB = os.path.join(ROOT, "blender", "assets", "monter_wires.glb")
 
 random.seed(7)
 rad = math.radians
@@ -51,6 +52,7 @@ KTPN_POS = (-13.0, -2.4)  # КТПН у дороги, левее фургона,
 KTPN_FRONT_Y = KTPN_POS[1] - 2.2
 KTPN_RIGHT_X = KTPN_POS[0] + 3.07
 KTPN_SIZE = (4.6, 1.84)
+PLACE_KTPN = False  # КТПН и монтёр пока убраны из сцены — ждём другую модель
 
 
 # ---------- Цвета и материалы ----------
@@ -349,7 +351,7 @@ def blocked_for_grass(x, y):
         return True
     if abs(x - CAR_POS[0]) < 2.9 and abs(y - CAR_POS[1]) < 1.25:  # место машины, трава не пробьёт кузов
         return True
-    if -KTPN_SIZE[0] - 0.3 < x - KTPN_RIGHT_X < 0.3 and -0.3 < y - KTPN_FRONT_Y < KTPN_SIZE[1] + 0.3:  # КТПН
+    if PLACE_KTPN and -KTPN_SIZE[0] - 0.3 < x - KTPN_RIGHT_X < 0.3 and -0.3 < y - KTPN_FRONT_Y < KTPN_SIZE[1] + 0.3:  # КТПН
         return True
     return False
 
@@ -936,30 +938,15 @@ def place_model(path, name, pos, rz, scale=1.0, base_z=0.0, solid=True, fit_logo
 
 
 def place_busy_worker():
-    """Монтёр в левом отсеке КТПН: стоит лицом к шкафу управления, руки подняты к нему. Один объект — три карточки
-    задания: без каски и в одиночку (нарушения), в диэлектрических ботах (правильно).
-    Модель та же, что у игрока (рост такой же: в build_worker.py 1,9 м до верха каски)"""
-    rz = math.pi  # лицом к задней стене КТПН (+Y)
-    meshes = place_model(WORKER_GLB, "item_no-helmet+alone+boots-ok", (KTPN_POS[0] - 1.9, KTPN_POS[1] + 0.3), rz,
-                         scale=1.9 / 2.64, base_z=0.2,  # 0,2 м — стальной пол КТПН
-                         solid=False, fit_logos=False, smooth=True,
-                         inspect=3.5,  # стоит в глубине КТПН — осматривается от входа
-                         drop=("hard_hat_dome", "helmet_brim", "helmet_front_rim"))
-    forward = V((math.sin(rz), -math.cos(rz), 0))
-    axis = forward.cross(V((0, 0, 1)))  # поворот вокруг этой оси поднимает руку вперёд
-    for side, angle in (("1", 70), ("-1", 50)):
-        arm = [o for o in meshes if o.name in (f"upper_sleeve{side}", f"lower_sleeve{side}", f"hand{side}")]
-        pts = [o.matrix_world @ v.co for o in arm if o.name.startswith("upper") for v in o.data.vertices]
-        pivot = V((sum(p.x for p in pts) / len(pts), sum(p.y for p in pts) / len(pts), max(p.z for p in pts) - 0.03))
-        m = Matrix.Translation(pivot) @ Matrix.Rotation(rad(angle), 4, axis) @ Matrix.Translation(-pivot)
-        for o in arm:
-            o.matrix_world = m @ o.matrix_world
-    # Диэлектрические боты: тёмная матовая резина вместо обычных ботинок
-    rubber = mat("Диэлектрическая резина", "#1E1F21", rough=0.55)
-    for o in meshes:
-        if o.name.startswith("boot"):
-            o.data.materials.clear()
-            o.data.materials.append(rubber)
+    """Монтёр без каски в левом отсеке КТПН: стоит на полу отсека лицом к трансформатору и голыми руками держится
+    за кабели над ним. Один объект — три карточки задания: без каски и в одиночку (нарушения), в диэлектрических
+    ботах (правильно). Поза задана в prep_monter.py: ладони на 0,25 м впереди и на 1,77 м выше ступней —
+    так они ложатся на кабели (их фасад в 1,07 м за фасадом КТПН, между x −2,94 и −2,64 от правого края)"""
+    place_model(MONTER_GLB, "item_no-helmet+alone+boots-ok", (KTPN_RIGHT_X - 2.78, KTPN_FRONT_Y + 0.79),
+                math.pi,  # лицом к задней стене КТПН (+Y)
+                base_z=0.26,  # пол отсека
+                solid=False, fit_logos=False,
+                inspect=3.5)  # стоит в глубине КТПН — осматривается от входа
 
 
 # ---------- Сборка ----------
@@ -989,8 +976,9 @@ def build():
     empty("place_ats", (-8.0, 7.0, 0))
     # Объекты задания «Улица у КТПН» (public/walk-tasks.json) называются item_<id карточки>
     place_model(VAN_GLB, "item_van-ok", CAR_POS, math.pi)  # мордой по +X вдоль дороги
-    place_model(KTPN_GLB, "item_zone-unfenced", (KTPN_RIGHT_X, KTPN_FRONT_Y), 0)  # дверями к дороге; вокруг нет ограждения
-    # place_busy_worker() — монтёр в КТПН пока не ставится (стоял под прежнюю модель)
+    if PLACE_KTPN:
+        place_model(KTPN_GLB, "item_zone-unfenced", (KTPN_RIGHT_X, KTPN_FRONT_Y), 0)  # дверями к дороге; вокруг нет ограждения
+        place_busy_worker()
     empty("place_worker", (-1.0, -4.0, 0))
 
     bpy.ops.wm.save_as_mainfile(filepath=OUT_BLEND)
