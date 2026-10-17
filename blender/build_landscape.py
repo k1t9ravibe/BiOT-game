@@ -1,9 +1,8 @@
 """
 Сельский ландшафт для режима ходьбы: рельеф, грунтовая дорога, трава, дом с двором, заборы, лестница, деревья,
 ВЛ 10 кВ вдоль дороги (бетонные опоры, изоляторы, провода).
-Фургон, КТПН, монтёр, сумка с огнетушителем и посторонние берутся готовыми из blender/assets (furgonkt_van.glb,
-ktpn1.glb, monter_wires.glb, sumka_ognetushitel.glb, muzhik_pes_pacan.glb — их готовят prep_furgon.py, prep_ktpn.py,
-prep_monter.py, prep_static.py).
+Фургон, КТПН с монтёром, сумка с огнетушителем и посторонние берутся готовыми из blender/assets (furgonkt_van.glb,
+ktpn_monter.glb, sumka_ognetushitel.glb, muzhik_pes_pacan.glb — их готовят prep_furgon.py, prep_ktpn.py, prep_static.py).
 АТС и людей сюда не ставим: их добавляют вручную в Blender, места помечены пустышками place_*.
 
 Запуск (из корня проекта):
@@ -33,8 +32,7 @@ ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 OUT_GLB = os.path.join(ROOT, "public", "models", "landscape.glb")
 OUT_BLEND = os.path.join(ROOT, "blender", "landscape_base.blend")
 VAN_GLB = os.path.join(ROOT, "blender", "assets", "furgonkt_van.glb")
-KTPN_GLB = os.path.join(ROOT, "blender", "assets", "ktpn1.glb")
-MONTER_GLB = os.path.join(ROOT, "blender", "assets", "monter_wires.glb")
+KTPN_GLB = os.path.join(ROOT, "blender", "assets", "ktpn_monter.glb")
 SUMKA_GLB = os.path.join(ROOT, "blender", "assets", "sumka_ognetushitel.glb")
 MUZHIK_GLB = os.path.join(ROOT, "blender", "assets", "muzhik_pes_pacan.glb")
 
@@ -50,12 +48,12 @@ YARD = (3, 0, 19, 15)  # двор: x0, y0, x1, y1
 GATE = (9.5, 11.0)     # проём калитки по X на передней стороне двора
 CAR_POS = (-2.0, ROAD_Y + 3.4)  # фургон на обочине вдоль дороги, у него — точка B
 KTPN_POS = (-13.0, -2.4)  # КТПН у дороги, левее фургона, ~20 м от дома, двери к дороге
-# Фасад и правый край КТПН: к ним привязаны огнетушитель и посторонние. Корпус ktpn1.glb 4,6 × 1,84 м стоит
-# от правого края влево и от фасада назад, распахнутая левая створка выходит к дороге на ~1,4 м
+# Фасад и правый край корпуса КТПН: от них стоят сумка с огнетушителем и посторонние. Корпус ktpn_monter.glb
+# 3,44 × 2,69 м стоит от правого края влево и от фасада назад; распахнутые створки выходят к дороге на ~1 м,
+# правая — ещё на ~0,9 м вправо; монтёр стоит в проёме
 KTPN_FRONT_Y = KTPN_POS[1] - 2.2
-KTPN_RIGHT_X = KTPN_POS[0] + 3.07
-KTPN_SIZE = (4.6, 1.84)
-PLACE_KTPN = False  # КТПН и монтёр пока убраны из сцены — ждём другую модель
+KTPN_RIGHT_X = KTPN_POS[0] + 2.17
+KTPN_SIZE = (3.44, 2.69)
 
 
 # ---------- Цвета и материалы ----------
@@ -354,7 +352,7 @@ def blocked_for_grass(x, y):
         return True
     if abs(x - CAR_POS[0]) < 2.9 and abs(y - CAR_POS[1]) < 1.25:  # место машины, трава не пробьёт кузов
         return True
-    if PLACE_KTPN and -KTPN_SIZE[0] - 0.3 < x - KTPN_RIGHT_X < 0.3 and -0.3 < y - KTPN_FRONT_Y < KTPN_SIZE[1] + 0.3:  # КТПН
+    if -KTPN_SIZE[0] - 0.3 < x - KTPN_RIGHT_X < 0.3 and -0.3 < y - KTPN_FRONT_Y < KTPN_SIZE[1] + 0.3:  # КТПН
         return True
     return False
 
@@ -779,17 +777,17 @@ def build_power_line():
 # ---------- Объекты задания у КТПН: посторонние в опасной зоне, огнетушитель ----------
 
 def build_bystanders():
-    """Посторонние у открытого отсека КТПН — нарушение «Люди и животные в опасной зоне»: мужчина присел и показывает
-    мальчику на КТПН, рядом собака. Стоят на обочине слева от КТПН лицом к идущему от точки A игроку"""
-    place_model(MUZHIK_GLB, "item_people-animals", (KTPN_POS[0] - 1.0, KTPN_FRONT_Y - 1.6),
-                rad(-125),  # мужчина смотрит на −X и чуть от дороги, вытянутая правая рука показывает на КТПН
+    """Посторонние у открытой КТПН — нарушение «Люди и животные в опасной зоне»: мужчина присел рядом с мальчиком
+    и собакой. Стоят на обочине слева от КТПН, за левой створкой, и все смотрят на КТПН"""
+    place_model(MUZHIK_GLB, "item_people-animals", (KTPN_RIGHT_X - KTPN_SIZE[0] - 1.2, KTPN_FRONT_Y - 1.8),
+                rad(138),  # лицом к середине КТПН
                 solid=False, fit_logos=False,
                 inspect=3.0)  # видно с дороги, подходить вплотную не нужно
 
 
 def build_extinguisher():
     """Сумка монтёра с инструментом и огнетушитель у правого угла КТПН — правильно, отвлекающий вариант"""
-    place_model(SUMKA_GLB, "item_extinguisher-ok", (KTPN_RIGHT_X + 0.1, KTPN_FRONT_Y - 0.6), 0,  # лицом к дороге
+    place_model(SUMKA_GLB, "item_extinguisher-ok", (KTPN_RIGHT_X + 1.6, KTPN_FRONT_Y - 0.6), 0,  # правее створки, лицом к дороге
                 solid=False, fit_logos=False)
 
 
@@ -875,18 +873,6 @@ def place_model(path, name, pos, rz, scale=1.0, base_z=0.0, solid=True, fit_logo
     return meshes
 
 
-def place_busy_worker():
-    """Монтёр без каски в левом отсеке КТПН: стоит на полу отсека лицом к трансформатору и голыми руками держится
-    за кабели над ним. Один объект — три карточки задания: без каски и в одиночку (нарушения), в диэлектрических
-    ботах (правильно). Поза задана в prep_monter.py: ладони на 0,25 м впереди и на 1,77 м выше ступней —
-    так они ложатся на кабели (их фасад в 1,07 м за фасадом КТПН, между x −2,94 и −2,64 от правого края)"""
-    place_model(MONTER_GLB, "item_no-helmet+alone+boots-ok", (KTPN_RIGHT_X - 2.78, KTPN_FRONT_Y + 0.79),
-                math.pi,  # лицом к задней стене КТПН (+Y)
-                base_z=0.26,  # пол отсека
-                solid=False, fit_logos=False,
-                inspect=3.5)  # стоит в глубине КТПН — осматривается от входа
-
-
 # ---------- Сборка ----------
 
 def build():
@@ -914,9 +900,10 @@ def build():
     empty("place_ats", (-8.0, 7.0, 0))
     # Объекты задания «Улица у КТПН» (public/walk-tasks.json) называются item_<id карточки>
     place_model(VAN_GLB, "item_van-ok", CAR_POS, math.pi)  # мордой по +X вдоль дороги
-    if PLACE_KTPN:
-        place_model(KTPN_GLB, "item_zone-unfenced", (KTPN_RIGHT_X, KTPN_FRONT_Y), 0)  # дверями к дороге; вокруг нет ограждения
-        place_busy_worker()
+    # КТПН дверями к дороге, вокруг нет ограждения. Монтёр — часть той же модели, поэтому один объект на четыре
+    # карточки: не ограждена зона, без каски и в одиночку (нарушения), в диэлектрических ботах (правильно)
+    place_model(KTPN_GLB, "item_zone-unfenced+no-helmet+alone+boots-ok", (KTPN_RIGHT_X, KTPN_FRONT_Y), 0,
+                inspect=3.5)  # монтёр в проёме — осматривается от створок
     empty("place_worker", (-1.0, -4.0, 0))
 
     bpy.ops.wm.save_as_mainfile(filepath=OUT_BLEND)
