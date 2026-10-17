@@ -1,7 +1,7 @@
 """
 Сельский ландшафт для режима ходьбы: рельеф, грунтовая дорога, трава, дом с двором, заборы, лестница, деревья,
 ВЛ 10 кВ вдоль дороги (бетонные опоры, изоляторы, провода).
-Фургон и КТПН берутся готовыми из blender/assets (furgonkt_van.glb — его готовит prep_furgon.py, kazakhtelecom_substation_no_signs.glb).
+Фургон и КТПН берутся готовыми из blender/assets (furgonkt_van.glb и ktpn1.glb — их готовят prep_furgon.py и prep_ktpn.py).
 АТС и людей сюда не ставим: их добавляют вручную в Blender, места помечены пустышками place_*.
 
 Запуск (из корня проекта):
@@ -31,7 +31,7 @@ ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 OUT_GLB = os.path.join(ROOT, "public", "models", "landscape.glb")
 OUT_BLEND = os.path.join(ROOT, "blender", "landscape_base.blend")
 VAN_GLB = os.path.join(ROOT, "blender", "assets", "furgonkt_van.glb")
-KTPN_GLB = os.path.join(ROOT, "blender", "assets", "kazakhtelecom_substation_no_signs.glb")
+KTPN_GLB = os.path.join(ROOT, "blender", "assets", "ktpn1.glb")
 WORKER_GLB = os.path.join(ROOT, "blender", "assets", "kazakhtelecom_worker_rounded_realistic.glb")
 
 random.seed(7)
@@ -45,7 +45,12 @@ PATH_X = 10.25    # тропинка от дороги к калитке и кр
 YARD = (3, 0, 19, 15)  # двор: x0, y0, x1, y1
 GATE = (9.5, 11.0)     # проём калитки по X на передней стороне двора
 CAR_POS = (-2.0, ROAD_Y + 3.4)  # фургон на обочине вдоль дороги, у него — точка B
-KTPN_POS = (-13.0, -2.4)  # КТПН у дороги, левее фургона, ~20 м от дома; 6,8 × 4,8 м, двери к дороге
+KTPN_POS = (-13.0, -2.4)  # КТПН у дороги, левее фургона, ~20 м от дома, двери к дороге
+# Фасад и правый край КТПН: к ним привязаны огнетушитель и посторонние. Корпус ktpn1.glb 4,6 × 1,84 м стоит
+# от правого края влево и от фасада назад, распахнутая левая створка выходит к дороге на ~1,4 м
+KTPN_FRONT_Y = KTPN_POS[1] - 2.2
+KTPN_RIGHT_X = KTPN_POS[0] + 3.07
+KTPN_SIZE = (4.6, 1.84)
 
 
 # ---------- Цвета и материалы ----------
@@ -344,7 +349,7 @@ def blocked_for_grass(x, y):
         return True
     if abs(x - CAR_POS[0]) < 2.9 and abs(y - CAR_POS[1]) < 1.25:  # место машины, трава не пробьёт кузов
         return True
-    if -4.0 < x - KTPN_POS[0] < 3.3 and abs(y - KTPN_POS[1]) < 2.8:  # КТПН
+    if -KTPN_SIZE[0] - 0.3 < x - KTPN_RIGHT_X < 0.3 and -0.3 < y - KTPN_FRONT_Y < KTPN_SIZE[1] + 0.3:  # КТПН
         return True
     return False
 
@@ -821,7 +826,7 @@ def build_bystanders():
     """Посторонние у открытого отсека КТПН — нарушение «Люди и животные в опасной зоне»"""
     mb = MB("item_people-animals")
     # От фасада КТПН отходим к дороге и чуть влево — посторонние всё ещё в опасной зоне, но не у самого входа
-    x0, y0 = KTPN_POS[0] - 0.6, KTPN_POS[1] - 2.2 - 0.9
+    x0, y0 = KTPN_POS[0] - 0.6, KTPN_FRONT_Y - 0.9
     villager(mb, (x0 - 1.0, y0 - 1.9, 0), rad(-15))  # смотрит в открытый отсек
     dog(mb, (x0 - 2.3, y0 - 1.3, 0), rad(30))
     for dx, dy, f in ((0.4, -1.2, 120), (0.9, -1.6, -60), (-0.1, -0.8, 200)):
@@ -836,7 +841,7 @@ def build_extinguisher():
     black = mat("Шланг", "#1C1C1E", rough=0.7)
     steel = mat("Запорная головка", "#9EA4AA", rough=0.3, metal=0.8)
     mb = MB("item_extinguisher-ok")
-    p = V((KTPN_POS[0] + 3.1, KTPN_POS[1] - 2.65, 0))
+    p = V((KTPN_RIGHT_X + 0.03, KTPN_FRONT_Y - 0.45, 0))
     mb.cyl(p, p + V((0, 0, 0.5)), 0.085, 0.085, red, n=14)
     mb.blob(p + V((0, 0, 0.5)), 0.085, red, scale=(1, 1, 0.5), bump=0)
     mb.cyl(p + V((0, 0, 0.53)), p + V((0, 0, 0.6)), 0.025, 0.025, steel, n=8)
@@ -930,31 +935,6 @@ def place_model(path, name, pos, rz, scale=1.0, base_z=0.0, solid=True, fit_logo
     return meshes
 
 
-def close_ktpn_right_door(meshes):
-    """В модели КТПН обе створки распахнуты; правую (там, где нет монтёра) закрываем:
-    поворачиваем её вокруг петли у среднего столба, пока она не ляжет вдоль фасада к правому столбу"""
-    door = [o for o in meshes if o.name == "OPEN BLUE DOOR 2" or o.name.startswith("door 2 ") or o.name == "door handle 1"]
-    posts = {o.name: o for o in meshes if o.name.startswith("front post")}
-
-    def center(o):
-        pts = [o.matrix_world @ v.co for v in o.data.vertices]
-        return sum(pts, V()) / len(pts)
-
-    hinge, far_post = center(posts["front post 0"]), center(posts["front post 2.8"])
-    panel = next(o for o in door if o.name == "OPEN BLUE DOOR 2")
-    tip = max((panel.matrix_world @ v.co for v in panel.data.vertices),
-              key=lambda p: (p.x - hinge.x) ** 2 + (p.y - hinge.y) ** 2)
-    now = math.atan2(tip.y - hinge.y, tip.x - hinge.x)
-    want = math.atan2(far_post.y - hinge.y, far_post.x - hinge.x)
-    h = V((hinge.x, hinge.y, 0))
-    # Створка в модели уже проёма — растягиваем по ширине до правого столба (минус его полутолщина)
-    k = ((far_post - hinge).to_2d().length - 0.06) / (tip - hinge).to_2d().length
-    stretch = (Matrix.Rotation(want, 4, "Z") @ Matrix.Diagonal((k, 1, 1, 1)) @ Matrix.Rotation(-want, 4, "Z"))
-    m = Matrix.Translation(h) @ stretch @ Matrix.Rotation(want - now, 4, "Z") @ Matrix.Translation(-h)
-    for o in door:
-        o.matrix_world = m @ o.matrix_world
-
-
 def place_busy_worker():
     """Монтёр в левом отсеке КТПН: стоит лицом к шкафу управления, руки подняты к нему. Один объект — три карточки
     задания: без каски и в одиночку (нарушения), в диэлектрических ботах (правильно).
@@ -1009,8 +989,8 @@ def build():
     empty("place_ats", (-8.0, 7.0, 0))
     # Объекты задания «Улица у КТПН» (public/walk-tasks.json) называются item_<id карточки>
     place_model(VAN_GLB, "item_van-ok", CAR_POS, math.pi)  # мордой по +X вдоль дороги
-    close_ktpn_right_door(place_model(KTPN_GLB, "item_zone-unfenced", KTPN_POS, 0))  # дверями к дороге; вокруг нет ограждения
-    place_busy_worker()
+    place_model(KTPN_GLB, "item_zone-unfenced", (KTPN_RIGHT_X, KTPN_FRONT_Y), 0)  # дверями к дороге; вокруг нет ограждения
+    # place_busy_worker() — монтёр в КТПН пока не ставится (стоял под прежнюю модель)
     empty("place_worker", (-1.0, -4.0, 0))
 
     bpy.ops.wm.save_as_mainfile(filepath=OUT_BLEND)

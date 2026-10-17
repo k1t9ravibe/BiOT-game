@@ -13,12 +13,15 @@
 
 import math
 import os
+import sys
 import tempfile
 
-import bmesh
 import bpy
 import numpy as np
 from mathutils import Matrix
+
+sys.path.insert(0, os.path.dirname(__file__))
+from prep_model import export_asset, import_decimated, shrink_textures, vertices  # noqa: E402
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 SRC = os.path.join(ROOT, "furgonkt.glb")
@@ -29,8 +32,6 @@ TEXT = "KAZAKHTELECOM"
 
 LENGTH = 5.54     # длина кузова, м — как у прежнего фургона
 DECIMATE = 0.03   # доля треугольников, которая остаётся (~45 тыс.)
-TEX = {"normal": 1024, "metallic": 1024}  # размер текстур по части имени; остальные (цвет) — 2048
-TEX_DEFAULT = 2048
 
 # Наклейка на грузовой панели обоих бортов (координаты готовой модели, м): там, где были старые логотип и надпись
 DECAL_X = (-0.08, 2.32)
@@ -40,47 +41,17 @@ DECAL_RES = 0.004  # шаг маски наклейки, м
 
 
 def load_van():
-    bpy.ops.wm.read_factory_settings(use_empty=True)
-    bpy.ops.import_scene.gltf(filepath=SRC)
-    o = next(o for o in bpy.data.objects if o.type == "MESH")
-    bpy.context.view_layer.objects.active = o
-    o.select_set(True)
-    bpy.ops.object.transform_apply(location=True, rotation=True, scale=True)  # импорт кладёт поворот Y→Z в объект
-
-    # glTF хранит меш разрезанным по швам развёртки, и упрощение двигает края островков UV в тёмные щели атласа —
-    # на кузове появляются чёрные треугольники. Склеиваем вершины и помечаем швы, тогда упрощение их бережёт
-    bm = bmesh.new()
-    bm.from_mesh(o.data)
-    bmesh.ops.remove_doubles(bm, verts=bm.verts, dist=1e-6)
-    bm.to_mesh(o.data)
-    bm.free()
-    bpy.ops.object.mode_set(mode="EDIT")
-    bpy.ops.mesh.select_all(action="SELECT")
-    bpy.ops.uv.seams_from_islands()
-    bpy.ops.object.mode_set(mode="OBJECT")
-
-    m = o.modifiers.new("decimate", "DECIMATE")
-    m.ratio = DECIMATE
-    bpy.ops.object.modifier_apply(modifier=m.name)
-    bpy.ops.object.shade_smooth_by_angle(angle=math.radians(40))
-
+    o = import_decimated(SRC, DECIMATE)
     # В файле морда смотрит на −Y: поворачиваем на −90° (морда на −X), масштабируем по длине,
     # ставим низом на ноль и центром в начало координат
     o.data.transform(Matrix.Rotation(math.radians(-90), 4, "Z"))
-    vs = [v.co for v in o.data.vertices]
-    lo = [min(c[i] for c in vs) for i in range(3)]
-    hi = [max(c[i] for c in vs) for i in range(3)]
+    co = vertices(o)
+    lo, hi = co.min(0), co.max(0)
     k = LENGTH / (hi[0] - lo[0])
     o.data.transform(Matrix.Scale(k, 4) @ Matrix.Translation((-(lo[0] + hi[0]) / 2, -(lo[1] + hi[1]) / 2, -lo[2])))
     o.name = "van_body"
-    print("van size, m:", [round((hi[i] - lo[i]) * k, 2) for i in range(3)])
-
-    for img in bpy.data.images:
-        if img.size[0] == 0:
-            continue
-        side = next((s for key, s in TEX.items() if key in img.name.lower()), TEX_DEFAULT)
-        if img.size[0] > side:
-            img.scale(side, side)
+    print("van size, m:", ((hi - lo) * k).round(2).tolist())
+    shrink_textures()
     return o
 
 
@@ -264,11 +235,7 @@ def build():
     o = load_van()
     flatten_panels(o)
     paint_decal(o, mask, blue)
-
-    # export_yup=False — как у остальных моделей в blender/assets: place_model ставит их поворотом на −90° по X
-    bpy.ops.export_scene.gltf(filepath=OUT, export_format="GLB", export_yup=False, export_image_format="JPEG",
-                              export_jpeg_quality=85)
-    print("saved", OUT, os.path.getsize(OUT) // 1024, "KB")
+    export_asset(OUT)
 
 
 build()
