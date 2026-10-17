@@ -1,8 +1,8 @@
 """
 Сельский ландшафт для режима ходьбы: рельеф, грунтовая дорога, трава, дом с двором, заборы, лестница, деревья,
 ВЛ 10 кВ вдоль дороги (бетонные опоры, изоляторы, провода).
-Фургон, КТПН и монтёр берутся готовыми из blender/assets (furgonkt_van.glb, ktpn1.glb, monter_wires.glb —
-их готовят prep_furgon.py, prep_ktpn.py, prep_monter.py).
+Фургон, КТПН, монтёр и сумка с огнетушителем берутся готовыми из blender/assets (furgonkt_van.glb, ktpn1.glb,
+monter_wires.glb, sumka_ognetushitel.glb — их готовят prep_furgon.py, prep_ktpn.py, prep_monter.py, prep_sumka.py).
 АТС и людей сюда не ставим: их добавляют вручную в Blender, места помечены пустышками place_*.
 
 Запуск (из корня проекта):
@@ -34,6 +34,7 @@ OUT_BLEND = os.path.join(ROOT, "blender", "landscape_base.blend")
 VAN_GLB = os.path.join(ROOT, "blender", "assets", "furgonkt_van.glb")
 KTPN_GLB = os.path.join(ROOT, "blender", "assets", "ktpn1.glb")
 MONTER_GLB = os.path.join(ROOT, "blender", "assets", "monter_wires.glb")
+SUMKA_GLB = os.path.join(ROOT, "blender", "assets", "sumka_ognetushitel.glb")
 
 random.seed(7)
 rad = math.radians
@@ -838,24 +839,12 @@ def build_bystanders():
 
 
 def build_extinguisher():
-    """Огнетушитель ОП у закрытой створки КТПН — правильно, отвлекающий вариант"""
-    red = mat("Огнетушитель", "#C8201E", rough=0.35, metal=0.2)
-    black = mat("Шланг", "#1C1C1E", rough=0.7)
-    steel = mat("Запорная головка", "#9EA4AA", rough=0.3, metal=0.8)
-    mb = MB("item_extinguisher-ok")
-    p = V((KTPN_RIGHT_X + 0.03, KTPN_FRONT_Y - 0.45, 0))
-    mb.cyl(p, p + V((0, 0, 0.5)), 0.085, 0.085, red, n=14)
-    mb.blob(p + V((0, 0, 0.5)), 0.085, red, scale=(1, 1, 0.5), bump=0)
-    mb.cyl(p + V((0, 0, 0.53)), p + V((0, 0, 0.6)), 0.025, 0.025, steel, n=8)
-    mb.box(p + V((0.05, 0, 0.62)), (0.14, 0.03, 0.02), black)  # рычаг
-    mb.box(p + V((0, -0.086, 0.3)), (0.1, 0.004, 0.14), mat("Этикетка", "#F4F1E8", rough=0.6))
-    hose = [p + V((0.03, 0, 0.58)), p + V((0.11, 0, 0.52)), p + V((0.12, 0, 0.3)), p + V((0.1, 0, 0.14))]
-    for a, b in zip(hose, hose[1:]):
-        mb.beam(a, b, 0.022, 0.022, black)
-    mb.build()
+    """Сумка монтёра с инструментом и огнетушитель у правого угла КТПН — правильно, отвлекающий вариант"""
+    place_model(SUMKA_GLB, "item_extinguisher-ok", (KTPN_RIGHT_X + 0.1, KTPN_FRONT_Y - 0.6), 0,  # лицом к дороге
+                solid=False, fit_logos=False)
 
 
-# ---------- Готовые модели: фургон, КТПН ----------
+# ---------- Готовые модели: фургон, КТПН, сумка с огнетушителем ----------
 
 def unmirror_decal(o, center):
     """Если наклейка читается зеркально для зрителя снаружи, переворачивает её UV по горизонтали"""
