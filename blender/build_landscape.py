@@ -1,8 +1,9 @@
 """
 Сельский ландшафт для режима ходьбы: рельеф, грунтовая дорога, трава, дом с двором, заборы, лестница, деревья,
 ВЛ 10 кВ вдоль дороги (бетонные опоры, изоляторы, провода).
-Фургон, КТПН, монтёр и сумка с огнетушителем берутся готовыми из blender/assets (furgonkt_van.glb, ktpn1.glb,
-monter_wires.glb, sumka_ognetushitel.glb — их готовят prep_furgon.py, prep_ktpn.py, prep_monter.py, prep_sumka.py).
+Фургон, КТПН, монтёр, сумка с огнетушителем и посторонние берутся готовыми из blender/assets (furgonkt_van.glb,
+ktpn1.glb, monter_wires.glb, sumka_ognetushitel.glb, muzhik_pes_pacan.glb — их готовят prep_furgon.py, prep_ktpn.py,
+prep_monter.py, prep_static.py).
 АТС и людей сюда не ставим: их добавляют вручную в Blender, места помечены пустышками place_*.
 
 Запуск (из корня проекта):
@@ -35,6 +36,7 @@ VAN_GLB = os.path.join(ROOT, "blender", "assets", "furgonkt_van.glb")
 KTPN_GLB = os.path.join(ROOT, "blender", "assets", "ktpn1.glb")
 MONTER_GLB = os.path.join(ROOT, "blender", "assets", "monter_wires.glb")
 SUMKA_GLB = os.path.join(ROOT, "blender", "assets", "sumka_ognetushitel.glb")
+MUZHIK_GLB = os.path.join(ROOT, "blender", "assets", "muzhik_pes_pacan.glb")
 
 random.seed(7)
 rad = math.radians
@@ -776,66 +778,13 @@ def build_power_line():
 
 # ---------- Объекты задания у КТПН: посторонние в опасной зоне, огнетушитель ----------
 
-def villager(mb, base, facing):
-    """Сельская жительница в платке и длинной юбке, ~1,65 м; facing — угол взгляда (0 — по +Y)"""
-    c, s = math.cos(facing), math.sin(facing)
-    at = lambda dx, dy, dz: V(base) + V((dx * c - dy * s, dx * s + dy * c, dz))
-    skin, scarf = mat("Кожа", "#E9C3A0", rough=0.8), mat("Платок", "#C7354A", rough=0.9)
-    blouse, skirt = mat("Кофта", "#6F8FBF", rough=0.9), mat("Юбка", "#3E3550", rough=0.9)
-    shoes = mat("Обувь", "#2A2421", rough=0.8)
-    for sx in (-1, 1):
-        mb.cyl(at(sx * 0.08, 0, 0), at(sx * 0.08, 0, 0.3), 0.045, 0.04, skin, n=6)
-        mb.box(at(sx * 0.08, 0.04, 0.03), (0.09, 0.2, 0.06), shoes, rz=facing)
-    mb.cyl(at(0, 0, 0.25), at(0, 0, 0.98), 0.3, 0.17, skirt, n=12)  # юбка расширяется книзу
-    mb.cyl(at(0, 0, 0.95), at(0, 0, 1.42), 0.17, 0.15, blouse, n=10)
-    for sx in (-1, 1):
-        mb.cyl(at(sx * 0.2, 0, 1.38), at(sx * 0.24, 0.12, 0.98), 0.05, 0.045, blouse, n=6)  # руки чуть вперёд
-        mb.blob(at(sx * 0.24, 0.13, 0.94), 0.045, skin, bump=0.02)
-    mb.cyl(at(0, 0, 1.42), at(0, 0, 1.5), 0.05, 0.05, skin, n=6)
-    mb.blob(at(0, 0.01, 1.6), 0.11, skin, scale=(0.9, 1, 1.1), bump=0.02)
-    mb.blob(at(0, -0.02, 1.63), 0.125, scarf, scale=(0.95, 0.95, 1.05), bump=0.03)  # платок сзади и сверху
-    mb.cyl(at(0, -0.08, 1.52), at(0, -0.14, 1.36), 0.06, 0.02, scarf, n=6)  # узел платка
-
-
-def dog(mb, base, facing):
-    """Дворовая собака, морда по направлению facing"""
-    c, s = math.cos(facing), math.sin(facing)
-    at = lambda dx, dy, dz: V(base) + V((dx * c - dy * s, dx * s + dy * c, dz))
-    fur, dark = mat("Шерсть", "#9A6A3E", rough=1.0), mat("Шерсть тёмная", "#4A3426", rough=1.0)
-    mb.blob(at(0, 0, 0.45), 0.2, fur, scale=(0.75, 1.55, 0.8), bump=0.05)
-    for sx in (-1, 1):
-        for sy in (-1, 1):
-            mb.cyl(at(sx * 0.09, sy * 0.2, 0), at(sx * 0.09, sy * 0.2, 0.4), 0.035, 0.04, fur, n=6)
-    mb.blob(at(0, 0.36, 0.63), 0.12, fur, bump=0.04)
-    mb.box(at(0, 0.48, 0.6), (0.09, 0.13, 0.08), dark, rz=facing)  # морда
-    for sx in (-1, 1):
-        mb.cyl(at(sx * 0.06, 0.33, 0.72), at(sx * 0.07, 0.32, 0.82), 0.035, 0, dark, n=4)  # уши
-    mb.beam(at(0, -0.3, 0.5), at(0, -0.45, 0.72), 0.04, 0.04, fur)  # хвост вверх
-
-
-def chicken(mb, base, facing):
-    c, s = math.cos(facing), math.sin(facing)
-    at = lambda dx, dy, dz: V(base) + V((dx * c - dy * s, dx * s + dy * c, dz))
-    white, red, beak = mat("Перо", "#F1EEE6", rough=1.0), mat("Гребешок", "#C9302C", rough=0.7), mat("Клюв", "#E7A12B", rough=0.6)
-    mb.blob(at(0, 0, 0.22), 0.12, white, scale=(0.8, 1.15, 0.9), bump=0.05)
-    mb.blob(at(0, 0.11, 0.36), 0.06, white, bump=0.03)
-    mb.box(at(0, 0.11, 0.43), (0.02, 0.06, 0.04), red, rz=facing)
-    mb.cyl(at(0, 0.16, 0.36), at(0, 0.21, 0.355), 0.02, 0, beak, n=4)
-    for sx in (-1, 1):
-        mb.cyl(at(sx * 0.04, 0, 0), at(sx * 0.04, 0, 0.13), 0.01, 0.01, beak, n=4)
-
-
 def build_bystanders():
-    """Посторонние у открытого отсека КТПН — нарушение «Люди и животные в опасной зоне»"""
-    mb = MB("item_people-animals")
-    # От фасада КТПН отходим к дороге и чуть влево — посторонние всё ещё в опасной зоне, но не у самого входа
-    x0, y0 = KTPN_POS[0] - 0.6, KTPN_FRONT_Y - 0.9
-    villager(mb, (x0 - 1.0, y0 - 1.9, 0), rad(-15))  # смотрит в открытый отсек
-    dog(mb, (x0 - 2.3, y0 - 1.3, 0), rad(30))
-    for dx, dy, f in ((0.4, -1.2, 120), (0.9, -1.6, -60), (-0.1, -0.8, 200)):
-        chicken(mb, (x0 + dx, y0 + dy, 0), rad(f))
-    o = mb.build()
-    o["inspect_range"] = 3.0  # видно с дороги, подходить вплотную не нужно
+    """Посторонние у открытого отсека КТПН — нарушение «Люди и животные в опасной зоне»: мужчина присел и показывает
+    мальчику на КТПН, рядом собака. Стоят на обочине слева от КТПН лицом к идущему от точки A игроку"""
+    place_model(MUZHIK_GLB, "item_people-animals", (KTPN_POS[0] - 1.0, KTPN_FRONT_Y - 1.6),
+                rad(-125),  # мужчина смотрит на −X и чуть от дороги, вытянутая правая рука показывает на КТПН
+                solid=False, fit_logos=False,
+                inspect=3.0)  # видно с дороги, подходить вплотную не нужно
 
 
 def build_extinguisher():
@@ -844,7 +793,7 @@ def build_extinguisher():
                 solid=False, fit_logos=False)
 
 
-# ---------- Готовые модели: фургон, КТПН, сумка с огнетушителем ----------
+# ---------- Готовые модели: фургон, КТПН, сумка с огнетушителем, посторонние ----------
 
 def unmirror_decal(o, center):
     """Если наклейка читается зеркально для зрителя снаружи, переворачивает её UV по горизонтали"""
