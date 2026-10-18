@@ -1,7 +1,8 @@
 """
 Локация 2 «Город»: улица днём для режима ходьбы от третьего лица (как сцена 1).
 Игрок идёт по тротуару от точки A к открытому колодцу на ближней полосе дороги (B): один монтёр
-сидит в люке, второй у ограждения с газоанализатором. Здания-организации — фон, их оживляет src/city/ambient.ts.
+сидит в люке, второй у ограждения с газоанализатором. Вдоль улицы — жилые кварталы (build_doma); старые
+здания-организации и силуэты высоток отключены (PLACE_OLD_BUILDINGS), их оживлял src/city/ambient.ts.
 
 Запуск (из корня проекта):
     "C:\\Program Files\\Blender Foundation\\Blender 4.5\\blender.exe" --background --python blender/build_city.py
@@ -62,14 +63,17 @@ HATCH = (KOLODEC_POS[0] + 0.14, KOLODEC_POS[1] + 0.08)
 HATCH_R = 0.5         # внутренний радиус горловины и шахты
 HATCH_CUT = 0.55      # радиус проёма в асфальте — край прячется под бетонным кольцом модели
 HATCH_SQUARE = 0.95   # полуширина квадратного выреза в асфальте и земле (круг вписан в него)
-WORKER_SHIFT = (0.0, 0.3, 0.06)  # сдвиг монтёра из модели на край горловины, м
+WORKER_SHIFT = (0.0, 0.38, -0.1)  # сдвиг монтёра из модели: сел на бетонное кольцо горловины, м
 SHAFT_DEPTH = 2.6     # глубина шахты
 # Квартал gorodskie_doma.glb (четыре пятиэтажки на общей подложке, 60,7 × 28,3 м, высота 18 м) — все жилые дома.
 # Кварталы стоят рядами вдоль улицы, фасадами к ней; (x центра, y края подложки со стороны улицы)
 DOMA_SIZE = (60.7, 28.3)
-DOMA_FAR = [(-66.0, 8.8), (-2.0, 8.8)]  # дальняя сторона до поликлиники (x ≥ 33)
+# Два ряда с каждой стороны улицы, второй ряд сдвинут на полквартала
+DOMA_FAR = [(-66.0 + 64 * k, 8.8) for k in range(6)]  # у дальнего тротуара
+DOMA_MID = [(-34.0 + 64 * k, 45.0) for k in range(6)]  # за ним
 DOMA_NEAR = [(-30.0 + 64 * k, -30.0) for k in range(5)]  # за сквером ближней стороны
-DOMA_MID = [(-40.0 + 64 * k, 76.0) for k in range(5)]  # средний план за зданиями-организациями
+DOMA_NEAR_BACK = [(2.0 + 64 * k, -66.0) for k in range(5)]
+PLACE_OLD_BUILDINGS = False  # поликлиника, пожарная часть, бизнес-центр, стройка, завод, силуэты высоток — убраны
 PLACE_VEHICLES = False     # машины пока убраны: скорая, пожарная и поток на дороге (образцы car_tpl_*)
 
 
@@ -284,7 +288,7 @@ def blink(name, parent, c, w, h, depth_axis="y"):
 def build_doma():
     """Жилые кварталы — копии одной модели gorodskie_doma.glb (меш и текстуры общие) рядами вдоль улицы"""
     rows = [(x, y + DOMA_SIZE[1] / 2, 0) for x, y in DOMA_FAR + DOMA_MID]
-    rows += [(x, y - DOMA_SIZE[1] / 2, math.pi) for x, y in DOMA_NEAR]  # ближняя сторона смотрит на +Y
+    rows += [(x, y - DOMA_SIZE[1] / 2, math.pi) for x, y in DOMA_NEAR + DOMA_NEAR_BACK]  # ближняя сторона — на +Y
     first = None
     for i, (x, y, rz) in enumerate(rows):
         name = f"doma_{i}"
@@ -862,13 +866,15 @@ def build():
     build_street()
     street_furniture()
     build_doma()
-    build_clinic()
-    build_fire_station()
-    build_business()
-    build_construction()
-    build_factory()
+    if PLACE_OLD_BUILDINGS:
+        build_clinic()
+        build_fire_station()
+        build_business()
+        build_construction()
+        build_factory()
     build_near_side()
-    build_backdrop()
+    if PLACE_OLD_BUILDINGS:
+        build_backdrop()
     build_manhole_work()
     build_templates()
 
