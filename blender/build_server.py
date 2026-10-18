@@ -48,13 +48,16 @@ RACK_W, RACK_D = 0.95, 0.93
 RACK_AISLE = 1.4
 RACKS = [(-W / 2 + 0.3 + RACK_D / 2 + r * (RACK_D + RACK_AISLE), (k - 1.5) * RACK_W, math.pi / 2)
          for r in range(4) for k in range(4)]
-# Вместо крайней стойки переднего ряда (со стороны двери) — сцена «монтёр льёт воду в стойку». Стойка в этой модели
-# крупнее (1,15 × 1,15 м): в файле её центр (0,63; 0,04), фасад к −X; поворот на 180° — фасадом к +X, в проход.
+# Вместо крайней стойки переднего ряда (со стороны двери) — сцена «монтёр льёт воду в стойку, из стойки дым».
+# Стойка в этой модели крупнее: 1,14 м по X файла, 1,16 м по Y; центр (0,63; 0,04), фасад к −Y, как у обычных
+# стоек; монтёр — сбоку (−X файла). Поворот тот же, что у ряда: фасадом в проход, монтёр — у торца ряда.
 # Задняя стенка — на одной линии с рядом, край — вплотную к соседней стойке
 TUSHIT_RACK = (0.63, 0.04)
-TUSHIT_RACK_SIZE = 1.15
+TUSHIT_SIZE = (1.14, 1.16)
+TUSHIT_RZ = math.pi / 2
+TUSHIT_SMOKE = [(0.63, -0.5, 1.75), (0.45, -0.5, 1.35), (0.63, 0.04, 2.02)]  # фасад и верх стойки, в координатах файла
 _front_x, _front_y, _ = RACKS.pop(12)  # ряд r = 3, место k = 0
-TUSHIT_CENTER = (_front_x - RACK_D / 2 + TUSHIT_RACK_SIZE / 2, _front_y + RACK_W / 2 - TUSHIT_RACK_SIZE / 2)
+TUSHIT_CENTER = (_front_x - RACK_D / 2 + TUSHIT_SIZE[1] / 2, _front_y + RACK_W / 2 - TUSHIT_SIZE[0] / 2)
 # Рабочие места у правой стены (x = W/2): стол монитором к стене, монтёр спиной к комнате. В файле монитор на −Y,
 # край стола с монитором — в 0,71 м от центра модели; поворот на 90° ставит −Y модели на +X сцены (к стене)
 DESK_EDGE = 0.71
@@ -219,6 +222,17 @@ def place_copies(path, prefix, spots):
             bpy.context.collection.objects.link(c)
 
 
+def place_tushit():
+    c, s = math.cos(TUSHIT_RZ), math.sin(TUSHIT_RZ)
+    rot = lambda x, y: (x * c - y * s, x * s + y * c)
+    rx, ry = rot(*TUSHIT_RACK)
+    ox, oy = TUSHIT_CENTER[0] - rx, TUSHIT_CENTER[1] - ry
+    city.place_model(TUSHIT_GLB, "wall_server_voda", (ox, oy), TUSHIT_RZ, smooth=True)
+    for n, (x, y, z) in enumerate(TUSHIT_SMOKE):  # откуда идёт дым (src/server/ambient.ts)
+        dx, dy = rot(x, y)
+        empty(f"smoke_src_{n}", (ox + dx, oy + dy, z))
+
+
 def build():
     bpy.ops.wm.read_factory_settings(use_empty=True)
     M = materials()
@@ -229,8 +243,7 @@ def build():
     build_door(M)
     place_copies(RACK_GLB, "wall_server", RACKS)
     place_copies(DESK_GLB, "wall_desk", DESKS)
-    (cx, cy), (rx, ry) = TUSHIT_CENTER, TUSHIT_RACK
-    city.place_model(TUSHIT_GLB, "wall_server_voda", (cx + rx, cy + ry), math.pi, smooth=True)  # (−rx, −ry) после поворота
+    place_tushit()
     build_outside(M)
 
     empty("spawn_A", (sum(DOOR_X) / 2, -D / 2 + 2.8, 0))  # перед дверью, чтобы камере за спиной хватало места
