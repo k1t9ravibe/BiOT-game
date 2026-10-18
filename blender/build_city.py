@@ -47,6 +47,7 @@ DOMA_GLB = os.path.join(ROOT, "blender", "assets", "gorodskie_doma.glb")
 LESTNICA_GLB = os.path.join(ROOT, "blender", "assets", "lestnica_dga.glb")
 OSTANOVKA_GLB = os.path.join(ROOT, "blender", "assets", "avtobusnaya_ostanovka.glb")
 DEREVYA_GLB = os.path.join(ROOT, "blender", "assets", "derevya.glb")  # tree_bereza, tree_topol, tree_el (prep_trees.py)
+KUSTY_GLB = os.path.join(ROOT, "blender", "assets", "kusty.glb")  # бордюры, цветники, кусты (prep_kusty.py)
 
 random.seed(11)
 
@@ -80,6 +81,10 @@ DOMA_MID = [(-34.0 + 64 * k, 45.0) for k in range(6)]  # за ним
 DOMA_NEAR = [(-30.0 + 64 * k, -30.0) for k in range(5)]  # за сквером ближней стороны
 DOMA_NEAR_BACK = [(2.0 + 64 * k, -66.0) for k in range(5)]
 TREES = []  # (вид, x, y, z, масштаб) — места деревьев; сами деревья ставит place_trees
+KUSTY = []  # (вид, x, y, поворот, имя объекта или None) — места кустов и цветников; ставит place_kusty
+SIDEWALK_KUSTY = ("bordur_dlinny", "cvetnik_1", "kust_na_podlozhke", "bordur_dlinny", "cvetnik_2",
+                  "kust_na_podlozhke", "bordur_dlinny", "cvetnik_3")  # по очереди вдоль края тротуара
+KUSTY_SINK = {"bordur_dlinny": 0.15, "bordur_korotky": 0.15, "kust_na_podlozhke": 0.15}  # прячем ножки под газон
 PLACE_OLD_BUILDINGS = False  # поликлиника, пожарная часть, бизнес-центр, стройка, завод, силуэты высоток — убраны
 PLACE_VEHICLES = False     # машины пока убраны: скорая, пожарная и поток на дороге (образцы car_tpl_*)
 
@@ -233,9 +238,7 @@ def street_furniture():
         mb.build()
         TREES.append(("tree_topol" if k % 2 else "tree_bereza", tx, -6.1, 0.55, 0.7))  # в кадке, чередуются
         TREES.append(("tree_bereza" if k % 2 else "tree_topol", x, CURB_FAR + 2.6, 0.04, 0.75))  # дальний тротуар
-        mb = MB(f"wall_hedge_{k}")
-        mb.box((x + 2, -7.6, 0.45), (5.0, 0.9, 0.9), M["leaf"])
-        mb.build()
+        KUSTY.append((SIDEWALK_KUSTY[k % len(SIDEWALK_KUSTY)], x + 2, -7.9, 0.0, f"wall_hedge_{k}"))
     for k, bx in enumerate((12, 96, 150)):  # скамейки
         mb = MB(f"wall_bench_{k}")
         mb.box((bx, -6.4, 0.45), (1.8, 0.45, 0.06), M["wood"])
@@ -260,7 +263,9 @@ def street_furniture():
 def build_near_side():
     """Ближняя сторона улицы (раньше была за камерой): живая изгородь по краю газона, сквер; дома — build_doma"""
     mb = MB("near_side")
-    mb.span(X0, -16.3, 0, X1, -15.5, 1.1, M["leaf"])  # граница прогулочной зоны игрока
+    n = round((X1 - X0) / 3.26)  # граница прогулочной зоны игрока — бордюры встык (длина бордюра 3,26 м)
+    for k in range(n):
+        KUSTY.append(("bordur_dlinny", X0 + (k + 0.5) * (X1 - X0) / n, -15.95, math.pi * (k % 2), None))
     mb.span(X0, -40, -0.005, X1, -16.3, 0.0, M["lawn"])
     for k in range(34):  # сквер: вперемешку, ели — реже
         x = X0 + 4 + k * 9 + random.uniform(-2.5, 2.5)
@@ -270,22 +275,34 @@ def build_near_side():
     mb.build()
 
 
-def place_trees():
-    """Копии трёх деревьев derevya.glb (меш и текстуры общие) по местам из TREES, каждое со своим поворотом"""
+def clone_parts(path, spots):
+    """Копии деталей набора path (меш и текстуры общие) по местам spots: (вид, x, y, z, масштаб, поворот, имя).
+    У каждой детали в файле начало координат — внизу по центру"""
     before = set(bpy.data.objects)
-    bpy.ops.import_scene.gltf(filepath=DEREVYA_GLB)
+    bpy.ops.import_scene.gltf(filepath=path)
     tpl = {o.name.split(".")[0]: o for o in set(bpy.data.objects) - before if o.type == "MESH"}
     # Модели сохранены с осью Z вверх, импорт поворачивает их как glTF с осью Y — возвращаем, как в place_model
     fix = Matrix.Rotation(rad(-90), 4, "X")
     local = {k: Matrix.Translation(-o.matrix_world.translation) @ o.matrix_world for k, o in tpl.items()}
-    for i, (kind, x, y, z, sc) in enumerate(TREES):
+    for i, (kind, x, y, z, sc, rz, name) in enumerate(spots):
         o = tpl[kind].copy()  # данные меша общие
-        o.name = f"{kind}_{i}"
+        o.name = name or f"{kind}_{i}"
         bpy.context.collection.objects.link(o)
-        o.matrix_world = (Matrix.Translation((x, y, z)) @ Matrix.Rotation(random.uniform(0, 2 * math.pi), 4, "Z")
-                          @ Matrix.Scale(sc, 4) @ fix @ local[kind])
+        o.matrix_world = (Matrix.Translation((x, y, z)) @ Matrix.Rotation(rz, 4, "Z") @ Matrix.Scale(sc, 4)
+                          @ fix @ local[kind])
     for o in tpl.values():
         bpy.data.objects.remove(o)
+
+
+def place_trees():
+    """Деревья derevya.glb по местам из TREES, каждое со своим случайным поворотом"""
+    clone_parts(DEREVYA_GLB, [(kind, x, y, z, sc, random.uniform(0, 2 * math.pi), None)
+                              for kind, x, y, z, sc in TREES])
+
+
+def place_kusty():
+    """Бордюры, цветники и кусты kusty.glb по местам из KUSTY; у тротуара — препятствия wall_hedge_*"""
+    clone_parts(KUSTY_GLB, [(kind, x, y, -KUSTY_SINK.get(kind, 0.0), 1.0, rz, name) for kind, x, y, rz, name in KUSTY])
 
 
 def blink(name, parent, c, w, h, depth_axis="y"):
@@ -888,6 +905,7 @@ def build():
         build_factory()
     build_near_side()
     place_trees()
+    place_kusty()
     if PLACE_OLD_BUILDINGS:
         build_backdrop()
     build_manhole_work()
