@@ -51,6 +51,8 @@ WALK_FAR = (5.0, 8.6)      # дальний тротуар
 LANE_NEAR, LANE_FAR = -1.0, 3.0   # оси полос: ближняя едет по +X, дальняя по −X
 TEMPLATES_X = -400         # образцы машин и пешеходов стоят далеко за кадром
 MANHOLE = (58.0, -11.6)    # открытый колодец на газоне; с севера между ограждением и изгородью остаётся проход
+PLACE_WORKERS = False      # монтёры у колодца пока убраны — ждём другие модели (карточки no-ppe, gas-detected)
+PLACE_VEHICLES = False     # машины пока убраны: скорая, пожарная и поток на дороге (образцы car_tpl_*)
 
 
 def glow(m, hex_color, strength=1.0):
@@ -329,7 +331,8 @@ def build_clinic():
     random.shuffle(panes)
     for k, (wx, z) in enumerate(panes[:4]):
         blink(f"win_clinic_{k}", p, (wx, y0 - 0.07, z), 1.4, 1.4)
-    ambulance(p, (49.5, 7.9, 0))
+    if PLACE_VEHICLES:
+        ambulance(p, (49.5, 7.9, 0))
 
 
 def ambulance(parent, pos):
@@ -391,7 +394,8 @@ def build_fire_station():
     mb.build(parent=p)
     for k, (wx, z) in enumerate(panes[1::2]):
         blink(f"win_fire_{k}", p, (wx, y0 - 0.07, z), 1.2, 1.4)
-    fire_truck(p, (66.0, 9.3, 0))
+    if PLACE_VEHICLES:
+        fire_truck(p, (66.0, 9.3, 0))
 
 
 def fire_truck(parent, pos):
@@ -750,40 +754,41 @@ def build_manhole_work():
     mb.box(c + V((-F - 0.05, 0, 1.45)), (0.02, 0.42, 0.37), M["red"])
     mb.build()["inspect_range"] = 1.3
 
-    # Монтёр сел на северный край люка и спускается без лестницы: ноги в колодце, без каски, в кроссовках,
-    # без перчаток; карточка видна с северной стороны ограждения
-    scale = 1.9 / 2.64  # рост как у игрока (build_worker.py)
-    rz = 0.0  # лицом к −Y, сидит на дальнем (+Y) краю горловины
-    meshes = place_model(WORKER_GLB, "item_no-ppe", (cx, cy + 0.68), rz, scale=scale, base_z=-0.55,
-                         solid=False, smooth=True, inspect=1.5,
-                         drop=("hard_hat_dome", "helmet_brim", "helmet_front_rim"))
-    for side in ("1", "-1"):
-        bend_leg(meshes, side, 70, rz)   # ноги свешены в колодец
-        raise_arm(meshes, side, 25, rz)  # руки упираются в край люка
-    recolor(meshes, ("boot",), sneakers)
+    if PLACE_WORKERS:
+        # Монтёр сел на северный край люка и спускается без лестницы: ноги в колодце, без каски, в кроссовках,
+        # без перчаток; карточка видна с северной стороны ограждения
+        scale = 1.9 / 2.64  # рост как у игрока (build_worker.py)
+        rz = 0.0  # лицом к −Y, сидит на дальнем (+Y) краю горловины
+        meshes = place_model(WORKER_GLB, "item_no-ppe", (cx, cy + 0.68), rz, scale=scale, base_z=-0.55,
+                             solid=False, smooth=True, inspect=1.5,
+                             drop=("hard_hat_dome", "helmet_brim", "helmet_front_rim"))
+        for side in ("1", "-1"):
+            bend_leg(meshes, side, 70, rz)   # ноги свешены в колодец
+            raise_arm(meshes, side, 25, rz)  # руки упираются в край люка
+        recolor(meshes, ("boot",), sneakers)
 
-    # Второй монтёр за ограждением с газоанализатором: лицом к колодцу (−X), в перчатках
-    rz = -math.pi / 2
-    name = "item_gas-detected"  # карточка «прибор показывает газ» откроется только после взгляда по Q
-    gx = cx + F + 0.45
-    meshes = place_model(WORKER_GLB, name, (gx, cy), rz, scale=scale, solid=True, smooth=True, inspect=1.5)
-    h1 = raise_arm(meshes, "1", 48, rz)
-    h2 = raise_arm(meshes, "-1", 48, rz)
-    recolor(meshes, ("hand",), gloves)
-    dev = (h1 + h2) / 2 + V((-0.06, 0, 0.04))
-    analyzer = MB("gas_analyzer")
-    analyzer.box(dev, (0.12, 0.2, 0.26), M["hazard"])
-    analyzer.box(dev + V((-0.065, 0, 0.05)), (0.01, 0.14, 0.09), M["car_glass"])  # экран
-    analyzer.box(dev + V((-0.065, 0, -0.06)), (0.01, 0.12, 0.05), M["dark"])      # кнопки
-    over = c + V((F, -0.15, 1.15))  # шланг пробоотборника перекинут через ограждение в колодец
-    tip = c + V((0.35, -0.15, 0.25))
-    analyzer.beam(dev + V((0, 0, -0.13)), over, 0.02, 0.02, M["dark"])
-    analyzer.beam(over, tip, 0.02, 0.02, M["dark"])
-    analyzer.beam(tip, c + V((0.3, -0.15, -1.6)), 0.02, 0.02, M["dark"])
-    analyzer.build(parent=bpy.data.objects[name])
-    bpy.data.objects[name]["look"] = "gas"
-    empty("pov_gas", (gx - 0.08, cy, 1.74))       # глаза монтёра
-    empty("pov_gas_target", (cx + 0.3, cy, 0.3))  # смотрит на прибор и люк
+        # Второй монтёр за ограждением с газоанализатором: лицом к колодцу (−X), в перчатках
+        rz = -math.pi / 2
+        name = "item_gas-detected"  # карточка «прибор показывает газ» откроется только после взгляда по Q
+        gx = cx + F + 0.45
+        meshes = place_model(WORKER_GLB, name, (gx, cy), rz, scale=scale, solid=True, smooth=True, inspect=1.5)
+        h1 = raise_arm(meshes, "1", 48, rz)
+        h2 = raise_arm(meshes, "-1", 48, rz)
+        recolor(meshes, ("hand",), gloves)
+        dev = (h1 + h2) / 2 + V((-0.06, 0, 0.04))
+        analyzer = MB("gas_analyzer")
+        analyzer.box(dev, (0.12, 0.2, 0.26), M["hazard"])
+        analyzer.box(dev + V((-0.065, 0, 0.05)), (0.01, 0.14, 0.09), M["car_glass"])  # экран
+        analyzer.box(dev + V((-0.065, 0, -0.06)), (0.01, 0.12, 0.05), M["dark"])      # кнопки
+        over = c + V((F, -0.15, 1.15))  # шланг пробоотборника перекинут через ограждение в колодец
+        tip = c + V((0.35, -0.15, 0.25))
+        analyzer.beam(dev + V((0, 0, -0.13)), over, 0.02, 0.02, M["dark"])
+        analyzer.beam(over, tip, 0.02, 0.02, M["dark"])
+        analyzer.beam(tip, c + V((0.3, -0.15, -1.6)), 0.02, 0.02, M["dark"])
+        analyzer.build(parent=bpy.data.objects[name])
+        bpy.data.objects[name]["look"] = "gas"
+        empty("pov_gas", (gx - 0.08, cy, 1.74))       # глаза монтёра
+        empty("pov_gas_target", (cx + 0.3, cy, 0.3))  # смотрит на прибор и люк
 
     # Противогаз в сумке у ограждения — правильно
     mb = MB("item_gasmask-ok")
@@ -928,7 +933,7 @@ def ped_template(i, coat, legs, skirt=False, backpack=False):
 
 
 def build_templates():
-    roots = [car_template(k) for k in ("sedan", "hatch", "bus", "truck")]
+    roots = [car_template(k) for k in ("sedan", "hatch", "bus", "truck")] if PLACE_VEHICLES else []
     roots += [ped_template(0, mat("Куртка", "#3E6FA8", rough=0.9), mat("Джинсы", "#2F3A4E", rough=0.9)),
               ped_template(1, mat("Пальто", "#B04A6A", rough=0.9), None, skirt=True),
               ped_template(2, mat("Худи", "#E0A33A", rough=0.9), mat("Брюки", "#4A4F57", rough=0.9), backpack=True),
