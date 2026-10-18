@@ -33,6 +33,8 @@ OUT_BLEND = os.path.join(ROOT, "blender", "server_base.blend")
 RACK_GLB = os.path.join(ROOT, "blender", "assets", "server_rack.glb")
 DESK_GLB = os.path.join(ROOT, "blender", "assets", "monter_za_compom.glb")
 TUSHIT_GLB = os.path.join(ROOT, "blender", "assets", "monter_tushit_server.glb")
+SHKAF_GLB = os.path.join(ROOT, "blender", "assets", "pozh_shkaf.glb")
+SHKAF_POS = (3.6, 1.0)  # x на стене у двери (−Y), высота низа над полом: шкаф и кронштейн — пустые (нарушение)
 
 W, D, H = 16.0, 12.0, 3.6        # помещение: ширина по X, глубина по Y, высота
 WALL = 0.25                      # толщина стен
@@ -195,12 +197,21 @@ def build_outside(M):
     g.build()
     city.place_model(city.DOMA_GLB, "doma_yard", (4.0, D / 2 + 14 + city.DOMA_SIZE[1] / 2), 0, base_z=-0.25,
                      solid=False, smooth=True)
-    trees = []
-    for k in range(9):
-        x = -16 + k * 4 + random.uniform(-0.8, 0.8)
-        trees.append((random.choice(("tree_bereza", "tree_topol", "tree_el")), x, D / 2 + 4 + random.uniform(-0.5, 0.5),
-                      -0.25, random.uniform(0.7, 0.95), random.uniform(0, 2 * math.pi), None))
+    # Деревья и кусты из локации 2 — сквер между окном и дорожкой и за дорожкой; ближе 7 м в окно видны
+    # только стволы, поэтому первый ряд — в 7–9 м от стены
+    trees, kusty = [], []
+    for row, (y0, n) in enumerate(((D / 2 + 7.5, 11), (D / 2 + 13, 9))):
+        for k in range(n):
+            x = -22 + k * 44 / (n - 1) + random.uniform(-1.2, 1.2) + row * 2
+            trees.append((random.choice(("tree_bereza", "tree_bereza", "tree_topol", "tree_el")), x,
+                          y0 + random.uniform(-1, 1), -0.25, random.uniform(0.8, 1.05), random.uniform(0, 2 * math.pi),
+                          None))
+    for k in range(14):
+        x = -20 + k * 3.1 + random.uniform(-0.5, 0.5)
+        kusty.append((random.choice(("kusty_para", "kust_na_podlozhke", "cvetnik_3", "kusty_para")), x,
+                      D / 2 + 3.2 + random.uniform(-0.4, 0.4), -0.4, 1.0, random.uniform(0, 2 * math.pi), None))
     city.clone_parts(city.DEREVYA_GLB, trees)
+    city.clone_parts(city.KUSTY_GLB, kusty)
 
 
 def place_copies(path, prefix, spots):
@@ -244,6 +255,9 @@ def build():
     place_copies(RACK_GLB, "wall_server", RACKS)
     place_copies(DESK_GLB, "wall_desk", DESKS)
     place_tushit()
+    # Пожарный шкаф на стене у двери, фасадом в комнату (в файле фасад на −Y)
+    city.place_model(SHKAF_GLB, "wall_pozh_shkaf", (SHKAF_POS[0], -D / 2 + 0.16), math.pi, base_z=SHKAF_POS[1],
+                     smooth=True)
     build_outside(M)
 
     empty("spawn_A", (sum(DOOR_X) / 2, -D / 2 + 2.8, 0))  # перед дверью, чтобы камере за спиной хватало места

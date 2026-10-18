@@ -47,6 +47,8 @@ MODELS = {
     "monter_comp": ("monter_za_compom.glb", "monter_za_compom.glb", 1.32, 0.04),
     # Монтёр льёт воду из ведра в открытую стойку (нарушение); стойка фасадом к −X, монтёр перед ней;
     # выше всего — верх стойки (2 м, как у остальных стоек)
+    # Пожарный шкаф без рукава (открыт, видны кран и табличка) и пустой кронштейн огнетушителя; фасадом к −Y
+    "pozh_shkaf": ("bez_shlanga_i_ognetushitel.glb", "pozh_shkaf.glb", ("width", 1.0), 0.04),
     "monter_tushit": ("monter_tushit_server.glb", "monter_tushit_server.glb", 2.0, 0.05, True),
 }
 
