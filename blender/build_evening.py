@@ -50,7 +50,9 @@ PODEMNIK_POLE_X = BROKEN[1]
 PODEMNIK_POLE = (2.34, -5.54)
 PODEMNIK_TOP_Z = 8.7                # крепление проводов на опоре модели
 PODEMNIK_RZ = math.pi / 2           # кабиной (−Y модели) к +X — к опоре BROKEN[1]
-BASKET = (0.62, -3.77, 5.27)        # центр дна корзины в координатах файла автовышки
+BASKET_FLOOR_Z = 5.27               # дно корзины в координатах файла автовышки
+MONTER_SPOT = (1.15, -4.35)         # монтёр в углу корзины у открытого ящика на опоре (prep_podemnik.py)
+BOX_FRONT = (1.85, -4.645)          # середина передней стенки ящика
 LAMP_LIGHT_X = (0, 150)            # точечный свет только у фонарей вдоль маршрута игрока — дальше хватает пятен
 
 
@@ -133,12 +135,11 @@ def podemnik_to_scene(x, y):
 
 def place_podemnik():
     city.place_model(PODEMNIK_GLB, "wall_podemnik", podemnik_to_scene(0, 0), PODEMNIK_RZ, smooth=True)
-    # Монтёр стоит в корзине лицом к опоре с проводами (в файле монтёр смотрит на +X)
-    bx, by, bz = BASKET
-    px, py = PODEMNIK_POLE
-    face = math.atan2(py - by, px - bx) + PODEMNIK_RZ
-    city.place_model(MONTER_GLB, "monter_v_korzine", podemnik_to_scene(bx, by), face, base_z=bz, solid=False,
-                     smooth=True)
+    # Монтёр стоит в корзине лицом к открытому ящику (в файле монтёр смотрит на +X)
+    mx, my = MONTER_SPOT
+    face = math.atan2(BOX_FRONT[1] - my, BOX_FRONT[0] - mx) + PODEMNIK_RZ
+    city.place_model(MONTER_GLB, "monter_v_korzine", podemnik_to_scene(mx, my), face, base_z=BASKET_FLOOR_Z,
+                     solid=False, smooth=True)
 
 
 def build_lamp_lights():
