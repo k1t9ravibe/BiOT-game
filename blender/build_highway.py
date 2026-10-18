@@ -28,6 +28,7 @@ from lowpoly import M, MB, empty, mat  # noqa: E402
 ROOT = city.ROOT
 OUT_GLB = os.path.join(ROOT, "public", "models", "highway.glb")
 OUT_BLEND = os.path.join(ROOT, "blender", "highway_base.blend")
+VAN_GLB = os.path.join(ROOT, "blender", "assets", "furgonkt_van.glb")  # фургон Казахтелекома из локации 1
 
 X0, X1 = -260, 300           # трасса по X
 ROAD = 3.6                   # полуширина проезжей части
@@ -41,6 +42,8 @@ SAG = 1.1
 WIRE_R = 0.02
 FALLEN_X = 40                # эта опора упала
 FALLEN_TOP = V((35.0, -1.6, 0.12))  # куда лёг её верх — на ближнюю полосу трассы
+
+VAN_POS = (-22.0, -4.5)       # фургон мастера на обочине перед точкой A, мордой по ходу движения (+X)
 
 random.seed(5)
 
@@ -187,6 +190,7 @@ def build():
     build_line()
     build_fallen()
     build_trees()
+    city.place_model(VAN_GLB, "wall_van", VAN_POS, math.pi, smooth=True)  # rz = π — мордой на +X, как в локации 1
 
     empty("spawn_A", (-30.0, -SHOULDER + 0.6, 0))  # на обочине со стороны линии
     empty("goal_B", (FALLEN_X - 32.0, -SHOULDER + 0.6, 0))  # ~15 м до проводов на земле, провод над ней — выше 4 м
