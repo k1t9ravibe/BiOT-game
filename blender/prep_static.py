@@ -27,6 +27,8 @@ MODELS = {
     "muzhik": ("muzhik_pes_pacan.glb", "muzhik_pes_pacan.glb", 1.3, 0.08),
     # Усадьба: дом с крыльцом, сарай, колодец, грядки, дерево и забор на травяной подложке; крыльцо смотрит на −Y
     "dom": ("village_dom_dlya_1sceny.glb", "dom_usadba.glb", ("width", 16.0), 0.04),
+    # Одноэтажный дом с крыльцом и вальмовой крышей без участка — дальние дома у дороги; крыльцо смотрит на −Y
+    "odin": ("odinochny_dom_village.glb", "dom_odinochny.glb", ("width", 8.0), 0.04),
 }
 
 

@@ -2,7 +2,8 @@
 Сельский ландшафт для режима ходьбы: рельеф, грунтовая дорога, трава, усадьба, заборы, деревья,
 ВЛ 10 кВ вдоль дороги (бетонные опоры, изоляторы, провода).
 Фургон, КТПН с монтёром, сумка с огнетушителем, посторонние и усадьба берутся готовыми из blender/assets
-(furgonkt_van.glb, ktpn_monter.glb, sumka_ognetushitel.glb, muzhik_pes_pacan.glb, dom_usadba.glb —
+(furgonkt_van.glb, ktpn_monter.glb, sumka_ognetushitel.glb, muzhik_pes_pacan.glb, dom_usadba.glb,
+dom_odinochny.glb —
 их готовят prep_furgon.py, prep_ktpn.py, prep_static.py).
 АТС и людей сюда не ставим: их добавляют вручную в Blender, места помечены пустышками place_*.
 
@@ -37,6 +38,7 @@ KTPN_GLB = os.path.join(ROOT, "blender", "assets", "ktpn_monter.glb")
 SUMKA_GLB = os.path.join(ROOT, "blender", "assets", "sumka_ognetushitel.glb")
 MUZHIK_GLB = os.path.join(ROOT, "blender", "assets", "muzhik_pes_pacan.glb")
 DOM_GLB = os.path.join(ROOT, "blender", "assets", "dom_usadba.glb")
+FAR_HOUSE_GLB = os.path.join(ROOT, "blender", "assets", "dom_odinochny.glb")
 
 random.seed(7)
 rad = math.radians
@@ -58,6 +60,11 @@ KTPN_POS = (-13.0, -2.4)  # КТПН у дороги, левее фургона,
 KTPN_FRONT_Y = KTPN_POS[1] - 2.2
 KTPN_RIGHT_X = KTPN_POS[0] + 2.17
 KTPN_SIZE = (3.44, 2.69)
+# Дальние дома у дороги (dom_odinochny.glb 8 × 7,15 м, высота 5,4 м): x, y, поворот; при rz = 0 крыльцо смотрит
+# на дорогу с севера, при π — с юга, из-за жердевого забора. Под каждым рельеф выровнен в площадку
+FAR_HOUSES = [(-44, -1.5, 0), (42, -1.5, 0), (-31, -21, math.pi), (52, -21, math.pi)]
+FAR_HOUSE_HALF = (4.0, 3.6)  # полуразмеры по X и Y модели
+PAD_MARGIN, PAD_BLEND = 1.5, 4.0  # ровная кромка вокруг дома и ширина плавного перехода к склону, м
 
 
 # ---------- Цвета и материалы ----------
@@ -277,8 +284,8 @@ def nz(x, y, s, off=0.0):
     return noise.noise(V((x / s, y / s, off)))
 
 
-def height(x, y):
-    """Высота земли: ровный центр, холмы за его границей, долина под дорогой"""
+def height_raw(x, y):
+    """Высота земли без площадок под домами: ровный центр, холмы за его границей, долина под дорогой"""
     edge = max(abs(x), abs(y)) + 4 * nz(x, y, 30, 0.5)
     f = smooth(FLAT, FLAT + 22, edge)
     if f == 0:
@@ -286,6 +293,31 @@ def height(x, y):
     valley = smooth(3, 14, abs(y - ROAD_Y))
     hills = 5 + 9 * (0.5 + 0.5 * nz(x, y, 35, 1.7)) + 2.5 * nz(x, y, 12, 3.1)
     return f * valley * hills
+
+
+def pad_distance(x, y, house):
+    """Насколько точка дальше от стен дома (по осям дома), чем ровная кромка площадки; внутри — 0"""
+    hx, hy, rz = house
+    c, s = math.cos(rz), math.sin(rz)
+    lx, ly = (x - hx) * c + (y - hy) * s, -(x - hx) * s + (y - hy) * c
+    dx = max(0.0, abs(lx) - FAR_HOUSE_HALF[0] - PAD_MARGIN)
+    dy = max(0.0, abs(ly) - FAR_HOUSE_HALF[1] - PAD_MARGIN)
+    return math.hypot(dx, dy)
+
+
+# Площадка — на уровне самой низкой точки под домом: в гору дом врезан в выемку, под гору склон не отсыпается
+PAD_LEVELS = [min(height_raw(h[0] + dx, h[1] + dy) for dx in range(-6, 7) for dy in range(-6, 7)
+                  if pad_distance(h[0] + dx, h[1] + dy, h) == 0) for h in FAR_HOUSES]
+
+
+def height(x, y):
+    """Высота земли с ровными площадками под дальними домами"""
+    h = height_raw(x, y)
+    for house, level in zip(FAR_HOUSES, PAD_LEVELS):
+        d = pad_distance(x, y, house)
+        if d < PAD_BLEND:
+            h = level + (h - level) * smooth(0, PAD_BLEND, d)
+    return h
 
 
 G1, G2, G3 = srgb("#5E9F37"), srgb("#77B545"), srgb("#4A8A2C")
@@ -349,6 +381,8 @@ def blocked_for_grass(x, y):
     if abs(x - CAR_POS[0]) < 2.9 and abs(y - CAR_POS[1]) < 1.25:  # место машины, трава не пробьёт кузов
         return True
     if -KTPN_SIZE[0] - 0.3 < x - KTPN_RIGHT_X < 0.3 and -0.3 < y - KTPN_FRONT_Y < KTPN_SIZE[1] + 0.3:  # КТПН
+        return True
+    if any(pad_distance(x, y, h) < 0.3 - PAD_MARGIN for h in FAR_HOUSES):  # дальние дома
         return True
     return False
 
@@ -503,7 +537,7 @@ def build_trees():
         a = random.uniform(0, 2 * math.pi)
         r = random.uniform(30, 68)
         x, y = math.cos(a) * r, math.sin(a) * r
-        if abs(y - ROAD_Y) < 6 or max(abs(x), abs(y)) < 27:
+        if abs(y - ROAD_Y) < 6 or max(abs(x), abs(y)) < 27 or any(pad_distance(x, y, h) < 1 for h in FAR_HOUSES):
             continue
         kind = random.choice(["pine", "pine", "birch", "tree"])
         tree(far_t, far_c, kind, x, y, random.uniform(0.9, 1.4))
@@ -523,24 +557,22 @@ def build_trees():
 # ---------- Дальние дома у дороги ----------
 
 def build_far_houses():
-    roofs = [M["roof"], mat("Кровля красная", "#8E3E3E", rough=0.5, metal=0.3), mat("Кровля синяя", "#3E5E8E", rough=0.5, metal=0.3)]
-    for i, (x, y, rz) in enumerate([(-44, -3.5, 0), (42, -3, 0), (-36, -17.5, math.pi), (52, -17, math.pi)]):
-        mb = MB(f"house_far_{i}")
-        z = min(height(x + dx, y + dy) for dx in (-3.5, 3.5) for dy in (-3, 3))
-        c, s = math.cos(rz), math.sin(rz)
-        rot = lambda dx, dy, dz: (x + dx * c - dy * s, y + dx * s + dy * c, z + dz)
-        mb.box(rot(0, 0, 0.0), (7.2, 5.8, 1.6), M["plinth"], rz=rz)
-        mb.box(rot(0, 0, 2.0), (7, 5.6, 2.4), M["plaster"], rz=rz)
-        for sy in (-1, 1):
-            mb.beam(rot(0, sy * 3.3, 3.0), rot(0, 0, 4.7), 7.8, 0.12, roofs[i % 3], side=(c, s, 0))
-        for ex in (-3.5, 3.5):
-            pts = [rot(ex, -2.8, 3.2), rot(ex, 2.8, 3.2), rot(ex, 0, 4.6)]
-            mb.poly(pts, [(0, 1, 2)], M["gable"])
-        for wx in (-1.8, 1.8):
-            mb.box(rot(wx, -2.82, 2.1), (1.0, 0.06, 1.1), M["glass"], rz=rz)
-            for sx in (-1, 1):
-                mb.box(rot(wx + sx * 0.78, -2.84, 2.1), (0.45, 0.04, 1.15), M["shutter"], rz=rz)
-        mb.build()
+    """Одна модель дома на все места: копии делят меш и текстуры, поэтому сцена не растёт в размере"""
+    first = None
+    for i, (x, y, rz) in enumerate(FAR_HOUSES):
+        name = f"house_far_{i}"
+        if first is None:
+            first = place_model(FAR_HOUSE_GLB, name, (x, y), rz, base_z=PAD_LEVELS[i], solid=False, fit_logos=False)
+            continue
+        root = first[0].parent.copy()
+        root.name = name
+        root.location = (x, y, root.location.z - PAD_LEVELS[0] + PAD_LEVELS[i])
+        root.rotation_euler.z = rz
+        bpy.context.collection.objects.link(root)
+        for o in first:
+            c = o.copy()  # данные меша общие
+            c.parent = root
+            bpy.context.collection.objects.link(c)
 
 
 # ---------- ВЛ 10 кВ вдоль дороги ----------
