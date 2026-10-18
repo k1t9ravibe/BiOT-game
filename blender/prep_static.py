@@ -49,6 +49,8 @@ MODELS = {
     # выше всего — верх стойки (2 м, как у остальных стоек)
     # Пожарный шкаф без рукава (открыт, видны кран и табличка) и пустой кронштейн огнетушителя; фасадом к −Y
     "pozh_shkaf": ("bez_shlanga_i_ognetushitel.glb", "pozh_shkaf.glb", ("width", 1.0), 0.04),
+    # Кабелеукладчик на гусеницах: барабан с кабелем (−Y), кабина, нож-плуг сзади (+Y); высота 3 м
+    "traktor": ("traktor_dlya_kopaniya.glb", "traktor_kabeleukladchik.glb", 3.0, 0.04),
     "monter_tushit": ("monter_tushit_server.glb", "monter_tushit_server.glb", 2.0, 0.05, True),
 }
 

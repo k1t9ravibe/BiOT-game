@@ -29,6 +29,7 @@ ROOT = city.ROOT
 OUT_GLB = os.path.join(ROOT, "public", "models", "highway.glb")
 OUT_BLEND = os.path.join(ROOT, "blender", "highway_base.blend")
 VAN_GLB = os.path.join(ROOT, "blender", "assets", "furgonkt_van.glb")  # фургон Казахтелекома из локации 1
+TRAKTOR_GLB = os.path.join(ROOT, "blender", "assets", "traktor_kabeleukladchik.glb")
 ZEMLYA_GLB = os.path.join(ROOT, "blender", "assets", "zemlya_trava.glb")  # плитка газона (prep_zemlya.py)
 TRAVA_TOP = os.path.join(ROOT, "blender", "assets", "trava_top.jpg")      # та же плитка сверху — дальняя земля
 
@@ -51,7 +52,12 @@ TILE_STEP = (5.85, 6.25)
 TILE_X = (-66, 84)
 TILE_ROWS = [-1, -2, -3, 1, 2]    # ряды от края обочины: −Y — сторона линии, +Y — за встречной полосой
 TILE_TOP = 6.0 * 0.8
-VAN_POS = (-22.0, -4.5)       # фургон мастера на обочине перед точкой A, мордой по ходу движения (+X)
+VAN_POS = (-22.0, -4.5)
+# Кабелеукладчик за линией ВЛ (справа по ходу игрока), идёт вдоль трассы барабаном вперёд (+X); за ножом —
+# полоса вскопанной земли с кабелем
+TRAKTOR_POS = (-2.0, -14.5)
+TRAKTOR_LEN = 7.3
+TRENCH_FROM = -60.0       # фургон мастера на обочине перед точкой A, мордой по ходу движения (+X)
 
 random.seed(5)
 
@@ -214,7 +220,7 @@ def build_fallen():
 
 def build_trees():
     trees, kusty = [], []
-    for side in (-1, 1):
+    for side in (1,):  # справа по ходу игрока (−Y) деревьев нет — там линия и кабелеукладчик
         x = X0
         while x < X1:
             x += random.uniform(5, 11)
@@ -233,6 +239,19 @@ def build_trees():
     city.clone_parts(city.KUSTY_GLB, kusty)
 
 
+def place_traktor():
+    city.place_model(TRAKTOR_GLB, "wall_traktor", TRAKTOR_POS, math.pi / 2, smooth=True)  # −Y модели → +X сцены
+    soil = mat("Вскопанная земля", "#5B4330", rough=1.0)
+    tail = TRAKTOR_POS[0] - TRAKTOR_LEN / 2 + 0.4  # нож-плуг
+    mb = MB("trench")
+    mb.span(TRENCH_FROM, TRAKTOR_POS[1] - 0.35, -0.02, tail, TRAKTOR_POS[1] + 0.35, 0.06, soil)
+    for x in range(int(TRENCH_FROM), int(tail), 2):  # отвалы земли по краям
+        for s in (-1, 1):
+            mb.blob((x + random.uniform(0, 1.5), TRAKTOR_POS[1] + s * 0.45, 0.05), random.uniform(0.18, 0.3), soil,
+                    scale=(1.6, 1, 0.5), seg=6, rings=4)
+    mb.build()
+
+
 def build():
     bpy.ops.wm.read_factory_settings(use_empty=True)
     materials()
@@ -241,6 +260,7 @@ def build():
     build_line()
     build_fallen()
     build_trees()
+    place_traktor()
     city.place_model(VAN_GLB, "wall_van", VAN_POS, math.pi, smooth=True)  # rz = π — мордой на +X, как в локации 1
 
     empty("spawn_A", (-30.0, -SHOULDER + 0.6, 0))  # на обочине со стороны линии
