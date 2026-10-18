@@ -49,11 +49,12 @@ def vertices(o):
     return co.reshape(-1, 3)
 
 
-def shrink_textures():
+def shrink_textures(scale=1):
+    """scale — во сколько раз крупнее обычного оставить текстуры (2 — HD: цвет 4096, карты 2048)"""
     for img in bpy.data.images:
         if img.size[0] == 0:
             continue
-        side = next((s for key, s in TEX.items() if key in img.name.lower()), TEX_DEFAULT)
+        side = next((s for key, s in TEX.items() if key in img.name.lower()), TEX_DEFAULT) * scale
         if img.size[0] > side:
             img.scale(side, side)
 

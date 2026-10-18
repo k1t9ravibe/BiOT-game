@@ -18,8 +18,9 @@ from prep_model import export_asset, import_decimated, shrink_textures, vertices
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 
-# имя: (исходник в корне проекта, результат в blender/assets, размер в метрах, доля треугольников);
-# размер — высота модели, или ("width", w) — ширина по X
+# имя: (исходник в корне проекта, результат в blender/assets, размер в метрах, доля треугольников[, HD]);
+# размер — высота модели, или ("width", w) — ширина по X; HD — текстуры вдвое крупнее обычного (для моделей,
+# к которым игрок подходит близко и на которых видна размытость)
 MODELS = {
     # Сумка монтёра с инструментом и огнетушитель; выше всего — огнетушитель с рукояткой
     "sumka": ("sumka_montera_ognetushitel.glb", "sumka_ognetushitel.glb", 0.55, 0.08),
@@ -40,11 +41,11 @@ MODELS = {
     "ostanovka": ("avtobusnaya_ostanovka.glb", "avtobusnaya_ostanovka.glb", 2.9, 0.03),
     # Автовышка с выдвинутыми опорами и поднятой корзиной у своей опоры ВЛ с обрезанными проводами; выше всего —
     # верх опоры (9 м, как у опор линии в build_evening.py). Машина вдоль Y, кабиной и опорой к −Y
-    "podemnik": ("podemnik_strela_bez_montera.glb", "podemnik.glb", 9.0, 0.02),
+    "podemnik": ("podemnik_strela_bez_montera.glb", "podemnik.glb", 9.0, 0.1, True),
 }
 
 
-def prepare(src, out, size, ratio):
+def prepare(src, out, size, ratio, hd=False):
     o = import_decimated(os.path.join(ROOT, src), ratio)
     co = vertices(o)
     lo, hi = co.min(0), co.max(0)
@@ -52,7 +53,7 @@ def prepare(src, out, size, ratio):
     o.data.transform(Matrix.Scale(k, 4) @ Matrix.Translation((-(lo[0] + hi[0]) / 2, -(lo[1] + hi[1]) / 2, -lo[2])))
     o.name = os.path.splitext(out)[0]
     print(src, "size, m:", ((hi - lo) * k).round(2).tolist())
-    shrink_textures()
+    shrink_textures(2 if hd else 1)
     export_asset(os.path.join(ROOT, "blender", "assets", out))
 
 
