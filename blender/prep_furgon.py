@@ -119,9 +119,9 @@ def render_text_mask():
     return crop(image_array(bpy.data.images.load(path))[:, :, 0])
 
 
-def logo_mask():
+def logo_mask(path=LOGO):
     """Маска и цвет логотипа: синее на белом (или на прозрачном) → маска 0…1 и синий цвет"""
-    a = image_array(bpy.data.images.load(LOGO))
+    a = image_array(bpy.data.images.load(path))
     alpha = a[:, :, 3] if a.shape[2] == 4 else np.ones(a.shape[:2], np.float32)
     mask = np.clip((1 - a[:, :, 0]) * alpha, 0, 1)
     blue = np.median(a[mask > 0.95][:, :3], axis=0)
@@ -238,4 +238,6 @@ def build():
     export_asset(OUT)
 
 
-build()
+# Маски надписи и логотипа берёт и prep_podemnik.py — при импорте не собираем
+if __name__ == "__main__":
+    build()
