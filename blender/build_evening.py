@@ -2,7 +2,8 @@
 Локация 3 «Вечерний город»: та же городская улица, что в локации 2 (кварталы, деревья, кусты, остановка —
 берутся из build_city.py), но вечером: горят фонари. Вдоль сквера на ближней стороне идёт воздушная линия
 0,4 кВ на бетонных опорах; в одном пролёте оборван провод: один конец свисает с опоры и лежит поперёк
-тротуара (искрит), другой свисает с соседней опоры на газон.
+тротуара (искрит), другой свисает с соседней опоры. У этой опоры вдоль оборванного пролёта стоит автовышка
+с поднятой корзиной (podemnik.glb — готовая модель вместе со своей опорой: она и заменяет опору линии).
 
 Запуск (из корня проекта):
     "C:\\Program Files\\Blender Foundation\\Blender 4.5\\blender.exe" --background --python blender/build_evening.py
@@ -30,9 +31,11 @@ from build_city import M, MB, empty, mat  # noqa: E402
 ROOT = city.ROOT
 OUT_GLB = os.path.join(ROOT, "public", "models", "evening.glb")
 OUT_BLEND = os.path.join(ROOT, "blender", "evening_base.blend")
+PODEMNIK_GLB = os.path.join(ROOT, "blender", "assets", "podemnik.glb")
 
-# Воздушная линия 0,4 кВ: опоры на газоне между тротуаром и сквером, пролёт 30 м, траверса поперёк линии
-LINE_Y = -11.0
+# Воздушная линия 0,4 кВ: опоры на газоне между тротуаром и сквером, пролёт 30 м, траверса поперёк линии.
+# Линия ближе к тротуару, чем к скверу: между ней и бордюрами сквера помещается автовышка с выдвинутыми опорами
+LINE_Y = -9.2
 POLE_XS = [15, 45, 75, 105, 135, 165]
 POLE_H = 9.0
 ARM_Z = 8.4                        # высота траверсы
@@ -40,6 +43,11 @@ PHASES = (-0.6, -0.2, 0.2, 0.6)    # провода по Y от оси лини�
 SAG = 0.9                          # стрела провеса целого провода
 BROKEN = (75, 105)                 # пролёт с оборванным проводом (по X опор); оборвана фаза у тротуара
 WIRE_R = 0.018                     # радиус провода (толще настоящего, чтобы было видно издалека)
+# Автовышка: опора модели (центр основания в файле — (2,34; −5,54) м от центра) встаёт на место опоры линии
+# BROKEN[1]; машина повёрнута на 90° и стоит вдоль оборванного пролёта, кабиной к опоре, со стороны сквера
+PODEMNIK_POLE_X = BROKEN[1]
+PODEMNIK_POLE = (2.34, -5.54)
+PODEMNIK_TOP_Z = 8.7                # крепление проводов на опоре модели
 LAMP_LIGHT_X = (0, 150)            # точечный свет только у фонарей вдоль маршрута игрока — дальше хватает пятен
 
 
@@ -62,12 +70,15 @@ def sagging(a, b, n=12):
 
 
 def insulator(x, y):
-    return V((x, y, ARM_Z + 0.22))  # точка крепления провода — верх изолятора
+    """Точка крепления провода — верх изолятора (на опоре автовышки — её арматура)"""
+    return V((x, y, PODEMNIK_TOP_Z if x == PODEMNIK_POLE_X else ARM_Z + 0.22))
 
 
 def build_line():
     mb = MB("power_line")
     for i, x in enumerate(POLE_XS):
+        if x == PODEMNIK_POLE_X:
+            continue  # эту опору даёт модель автовышки
         pole = MB(f"wall_pole_{i}")
         pole.cyl((x, LINE_Y, 0), (x, LINE_Y, POLE_H), 0.16, 0.1, M["pole"], n=6)
         pole.build()
@@ -93,20 +104,28 @@ def build_broken_wire():
     top = insulator(a, y)
     down = [top, top + V((0.3, 0.05, -1.5)), top + V((0.8, 0.15, -3.8)), top + V((1.4, 0.3, -6.2)),
             V((a + 1.9, y + 0.4, 0.6)), V((a + 2.2, y + 0.45, 0.03))]
-    ground = [V((a + 3.5, y + 1.2, 0.03)), V((a + 5.0, y + 2.4, 0.03)), V((a + 6.4, y + 3.3, 0.05)),
-              V((a + 7.6, y + 4.6, 0.03)), V((a + 8.4, y + 6.0, 0.06)), V((a + 9.6, y + 6.9, 0.07))]
+    ground = [V((a + 3.5, y + 1.0, 0.03)), V((a + 5.0, y + 1.9, 0.03)), V((a + 6.4, y + 2.6, 0.05)),
+              V((a + 7.6, y + 3.7, 0.03)), V((a + 8.4, y + 4.8, 0.06)), V((a + 9.6, y + 5.5, 0.07))]
     mb = MB("item_wire-down")
     wire(mb, down + ground)
     mb.build()["inspect_range"] = 8.0
     empty("spark_src", ground[-1] + V((0, 0, 0.05)))
 
-    top = insulator(b, y)
-    pts = [top, top + V((-0.2, 0.05, -2.0)), top + V((-0.6, 0.1, -4.5)), top + V((-1.0, 0.2, -7.0)),
-           V((b - 1.4, y + 0.25, 0.4)), V((b - 1.7, y + 0.3, 0.03)), V((b - 3.2, y - 0.4, 0.03)),
-           V((b - 4.6, y - 0.1, 0.03)), V((b - 6.0, y - 0.9, 0.04))]
+    top = insulator(b, y)  # свисает с опоры автовышки и ложится на газон за ней — в сторону от машины
+    pts = [top, top + V((0.25, 0.05, -2.0)), top + V((0.55, 0.0, -4.5)), top + V((0.8, -0.1, -7.0)),
+           V((b + 1.0, y - 0.2, 0.4)), V((b + 1.2, y - 0.3, 0.03)), V((b + 2.6, y - 0.9, 0.03)),
+           V((b + 3.9, y - 0.6, 0.03)), V((b + 5.2, y - 1.3, 0.04))]
     mb = MB("item_wire-hanging")
     wire(mb, pts)
     mb.build()["inspect_range"] = 8.0
+
+
+def place_podemnik():
+    rz = math.pi / 2  # кабиной (−Y модели) к +X — к опоре BROKEN[1]
+    px, py = PODEMNIK_POLE
+    c, s = math.cos(rz), math.sin(rz)
+    origin = (PODEMNIK_POLE_X - (px * c - py * s), LINE_Y - (px * s + py * c))
+    city.place_model(PODEMNIK_GLB, "wall_podemnik", origin, rz, smooth=True)
 
 
 def build_lamp_lights():
@@ -131,6 +150,7 @@ def build():
     city.place_kusty()
     build_line()
     build_broken_wire()
+    place_podemnik()
     build_lamp_lights()
     city.build_templates()
 

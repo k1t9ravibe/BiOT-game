@@ -38,6 +38,9 @@ MODELS = {
     "lestnica": ("lestnica_i_dga.glb", "lestnica_dga.glb", 0.6, 0.03),
     # Автобусная остановка: навес, стеклянные стенки, скамейка, урна, знак на столбе (он выше всего); скамейка — на −Y
     "ostanovka": ("avtobusnaya_ostanovka.glb", "avtobusnaya_ostanovka.glb", 2.9, 0.03),
+    # Автовышка с выдвинутыми опорами и поднятой корзиной у своей опоры ВЛ с обрезанными проводами; выше всего —
+    # верх опоры (9 м, как у опор линии в build_evening.py). Машина вдоль Y, кабиной и опорой к −Y
+    "podemnik": ("podemnik_strela_bez_montera.glb", "podemnik.glb", 9.0, 0.02),
 }
 
 
