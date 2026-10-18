@@ -22,10 +22,12 @@ import random
 import sys
 
 import bpy
+import numpy as np
 
 sys.path.insert(0, os.path.dirname(__file__))
 import build_city as city  # noqa: E402
 from lowpoly import MB, empty, mat, principled  # noqa: E402
+from prep_furgon import bilinear, logo_mask, render_text_mask  # noqa: E402
 
 ROOT = city.ROOT
 OUT_GLB = os.path.join(ROOT, "public", "models", "server.glb")
@@ -34,6 +36,11 @@ RACK_GLB = os.path.join(ROOT, "blender", "assets", "server_rack.glb")
 DESK_GLB = os.path.join(ROOT, "blender", "assets", "monter_za_compom.glb")
 TUSHIT_GLB = os.path.join(ROOT, "blender", "assets", "monter_tushit_server.glb")
 SHKAF_GLB = os.path.join(ROOT, "blender", "assets", "pozh_shkaf.glb")
+LOGO_PNG = os.path.join(ROOT, "logo_ktl.png")
+# Логотип и под ним надпись KAZAKHTELECOM на стене с окном (+Y), справа от окна: центр по x, низ надписи
+# над полом, ширина надписи; высота логотипа; зазор между ними, м
+SIGN_X, SIGN_Z, SIGN_W, SIGN_LOGO_H, SIGN_GAP = 5.0, 1.35, 3.0, 1.0, 0.14
+SIGN_RES = 400  # пикселей на метр
 SHKAF_POS = (3.6, 1.0)  # x на стене у двери (−Y), высота низа над полом: шкаф и кронштейн — пустые (нарушение)
 
 W, D, H = 16.0, 12.0, 3.6        # помещение: ширина по X, глубина по Y, высота
@@ -244,7 +251,55 @@ def place_tushit():
         empty(f"smoke_src_{n}", (ox + dx, oy + dy, z))
 
 
+def sign_pixels():
+    """Картинка логотипа с надписью: синий по прозрачному (RGBA, строка 0 — низ). До сброса сцены:
+    render_text_mask рендерит надпись в своей сцене"""
+    text = render_text_mask()
+    logo, blue = logo_mask(LOGO_PNG)
+    th = SIGN_W * text.shape[0] / text.shape[1]
+    lw = SIGN_LOGO_H * logo.shape[1] / logo.shape[0]
+    H = th + SIGN_GAP + SIGN_LOGO_H
+    w, h = int(SIGN_W * SIGN_RES), int(H * SIGN_RES)
+    X, Z = np.meshgrid((np.arange(w) + 0.5) / SIGN_RES, (np.arange(h) + 0.5) / SIGN_RES)
+    a = np.maximum(bilinear(text, X / SIGN_W, Z / th),
+                   bilinear(logo, (X - (SIGN_W - lw) / 2) / lw, (Z - th - SIGN_GAP) / SIGN_LOGO_H))
+    px = np.zeros((h, w, 4), np.float32)
+    px[:, :, :3] = blue
+    px[:, :, 3] = np.clip(a, 0, 1)
+    return px, H
+
+
+def build_sign(px, height):
+    """Наклейка на внутренней грани стены с окном — прямоугольник с картинкой, смотрит в комнату (−Y)"""
+    h, w = px.shape[:2]
+    img = bpy.data.images.new("ktl_wall_sign", w, h, alpha=True)
+    img.pixels.foreach_set(px.ravel())
+    img.pack()
+    m = bpy.data.materials.new("Логотип на стене")
+    m.use_nodes = True
+    b = principled(m.node_tree)
+    tex = m.node_tree.nodes.new("ShaderNodeTexImage")
+    tex.image = img
+    m.node_tree.links.new(tex.outputs["Color"], b.inputs["Base Color"])
+    m.node_tree.links.new(tex.outputs["Alpha"], b.inputs["Alpha"])
+    b.inputs["Roughness"].default_value = 0.6
+    m.surface_render_method = "BLENDED"
+    x0, x1 = SIGN_X - SIGN_W / 2, SIGN_X + SIGN_W / 2
+    z0, z1 = SIGN_Z, SIGN_Z + height
+    y = D / 2 - 0.006
+    me = bpy.data.meshes.new("wall_sign")
+    me.from_pydata([(x0, y, z0), (x1, y, z0), (x1, y, z1), (x0, y, z1)], [], [(0, 1, 2, 3)])  # нормаль к −Y
+    uv = me.uv_layers.new()
+    for loop, co in zip(uv.data, ((0, 0), (1, 0), (1, 1), (0, 1))):
+        loop.uv = co
+    me.materials.append(m)
+    o = bpy.data.objects.new("ktl_wall_sign", me)
+    o["no_shadow"] = 1
+    bpy.context.collection.objects.link(o)
+
+
 def build():
+    sign = sign_pixels()
     bpy.ops.wm.read_factory_settings(use_empty=True)
     M = materials()
     build_floor(M)
@@ -252,6 +307,7 @@ def build():
     build_ceiling(M)
     build_window(M)
     build_door(M)
+    build_sign(*sign)
     place_copies(RACK_GLB, "wall_server", RACKS)
     place_copies(DESK_GLB, "wall_desk", DESKS)
     place_tushit()
