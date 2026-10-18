@@ -6,13 +6,14 @@ import { ListCards } from '../components/ListCards'
 import { ReviewList } from '../components/ReviewList'
 import { cityAmbient } from '../city/ambient'
 import { gasAnalyzerRig } from '../city/gasAnalyzer'
+import { EVENING_SKY, eveningAmbient } from '../evening/ambient'
 import { isCityUnlocked, saveLoc1Result } from '../lib/progress'
 import { scoreTask } from '../lib/scoring'
 import { WalkEngine, type WalkOptions } from '../walk/engine'
 import type { Task, TaskResult } from '../types'
 
 /**
- * Режим ходьбы (/walk, город — /city): 3D-сцена из Blender, игрок идёт от точки A к точке B,
+ * Режим ходьбы (/walk, город — /city, вечерний город — /evening): 3D-сцена из Blender, игрок идёт от точки A к точке B,
  * по пути осматривает объекты и отмечает нарушения. Карточки и баллы — в формате tasks.json.
  * Объекты сцены с именем item_<id> соответствуют карточкам задания с тем же id.
  */
@@ -48,12 +49,22 @@ export const SCENES: Record<string, SceneConfig> = {
     looks: { gas: { near: 'Газоанализатор у монтёра', title: 'Газоанализатор — глазами монтёра', reveals: ['gas-detected'] } },
     locked: () => !isCityUnlocked(),
   },
+  // Локация 3 — вечерний город: оборванный провод воздушной линии 0,4 кВ (в работе, карточки — черновик)
+  evening: {
+    number: 3,
+    tasksUrl: '/walk-tasks.json',
+    taskId: 'evening',
+    title: 'Оборванный провод на вечерней улице',
+    route: 'Пройдите по тротуару от точки A до точки B.',
+    options: { fog: [40, 220], far: 700, sunFollow: true, sky: EVENING_SKY, ambient: eveningAmbient },
+  },
   t1: { tasksUrl: config.tasksUrl, taskId: 't1', title: 'Опора у сельской АТС', route: 'Дойдите от фургона (A) до опоры (B).' },
 }
 /** По умолчанию ландшафт; другую сцену можно выбрать параметром: /walk?scene=t1 → /models/t1.glb */
 const PARAMS = new URLSearchParams(location.search)
-const IS_CITY = /^\/city\/?$/.test(location.pathname) || location.hash === '#city'
-const SCENE_NAME = IS_CITY ? 'city' : PARAMS.get('scene')?.replace(/[^\w-]/g, '') || 'landscape'
+/** Сцены с собственным адресом: /city (#city), /evening (#evening) */
+const ROUTED = ['city', 'evening'].find((s) => location.pathname.replace(/\/$/, '') === `/${s}` || location.hash === `#${s}`)
+const SCENE_NAME = ROUTED ?? (PARAMS.get('scene')?.replace(/[^\w-]/g, '') || 'landscape')
 const WORKER_URL = '/models/worker.glb'
 /** На каком расстоянии от B можно завершить осмотр */
 const GOAL_RADIUS = 2

@@ -11,8 +11,28 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
  *   pov_<id> и смотрит на pov_<id>_target, перед ней — то, что держит работник (WalkOptions.povRig).
  */
 
+/** Небо и свет сцены */
+export interface WalkSky {
+  background: string
+  fog: string
+  /** Рассеянный свет: цвет неба, цвет земли, яркость */
+  hemi: [string, string, number]
+  /** Солнце: цвет, яркость, положение относительно игрока (или центра сцены) */
+  sun: [string, number, [number, number, number]]
+}
+
+/** Ясный день — как в сценах 1 и 2 */
+export const DAY_SKY: WalkSky = {
+  background: '#a9d6f5',
+  fog: '#cfe6f5',
+  hemi: ['#dff1ff', '#8a9a5b', 1.6],
+  sun: ['#fff4e0', 2.4, [12, 20, 8]],
+}
+
 /** Настройки сцены; без них движок работает как в сцене 1 */
 export interface WalkOptions {
+  /** Небо и свет; по умолчанию ясный день (DAY_SKY) */
+  sky?: WalkSky
   /** Туман: где начинается и где всё скрывается, м */
   fog?: [number, number]
   /** Дальность прорисовки камеры, м */
@@ -85,7 +105,8 @@ export class WalkEngine {
   private container: HTMLElement
   private cb: EngineCallbacks
   private opts: WalkOptions
-  private sun = new THREE.DirectionalLight('#fff4e0', 2.4)
+  private sun = new THREE.DirectionalLight()
+  private sunOffset = new THREE.Vector3()
   private bounds = { minX: -WORLD_LIMIT, maxX: WORLD_LIMIT, minZ: -WORLD_LIMIT, maxZ: WORLD_LIMIT }
   private ambient?: { update: (dt: number, t: number) => void }
   private looks: { id: string; obj: THREE.Object3D; box: THREE.Box3; range: number; eye: THREE.Vector3; target: THREE.Vector3 }[] = []
@@ -108,12 +129,16 @@ export class WalkEngine {
     container.appendChild(this.renderer.domElement)
 
     // Небо, туман у горизонта, свет
-    this.scene.background = new THREE.Color('#a9d6f5')
+    const sky = opts.sky ?? DAY_SKY
+    this.scene.background = new THREE.Color(sky.background)
     const [fogNear, fogFar] = opts.fog ?? [30, 70]
-    this.scene.fog = new THREE.Fog('#cfe6f5', fogNear, fogFar)
-    this.scene.add(new THREE.HemisphereLight('#dff1ff', '#8a9a5b', 1.6))
+    this.scene.fog = new THREE.Fog(sky.fog, fogNear, fogFar)
+    this.scene.add(new THREE.HemisphereLight(sky.hemi[0], sky.hemi[1], sky.hemi[2]))
     const sun = this.sun
-    sun.position.set(12, 20, 8)
+    sun.color.set(sky.sun[0])
+    sun.intensity = sky.sun[1]
+    this.sunOffset.set(...sky.sun[2])
+    sun.position.copy(this.sunOffset)
     sun.castShadow = true
     sun.shadow.mapSize.set(2048, 2048)
     Object.assign(sun.shadow.camera, { left: -25, right: 25, top: 25, bottom: -25, near: 1, far: 60 })
@@ -382,7 +407,7 @@ export class WalkEngine {
     this.updateCamera(dt)
     if (this.opts.sunFollow) {
       const p = this.player.position
-      this.sun.position.set(p.x + 12, 20, p.z + 8)
+      this.sun.position.copy(p).add(this.sunOffset)
       this.sun.target.position.copy(p)
     }
     this.ambient?.update(dt, this.clock.elapsedTime)

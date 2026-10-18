@@ -161,15 +161,22 @@ def city_materials():
 
 # ---------- Земля и улица ----------
 
-def build_street():
+def build_street(hatch=True):
+    """hatch — проём в асфальте под люком колодца (в сцене «Вечерний город» колодца нет)"""
     g = MB("ground")
-    span_with_hole(g, X0 - 200, -700, -0.05, X1 + 260, 700, -0.01, M["ground"])
+    if hatch:
+        span_with_hole(g, X0 - 200, -700, -0.05, X1 + 260, 700, -0.01, M["ground"])
+    else:
+        g.span(X0 - 200, -700, -0.05, X1 + 260, 700, -0.01, M["ground"])
     g.span(X0, -40, -0.01, X1, WALK_NEAR[0], 0.0, M["lawn"])
     g.build()
 
     s = MB("street")
-    span_with_hole(s, X0, CURB_NEAR, 0.0, X1, CURB_FAR, 0.02, M["asphalt"])
-    hatch_ring(s, 0.0, 0.02, M["asphalt"])  # асфальт вокруг круглого проёма
+    if hatch:
+        span_with_hole(s, X0, CURB_NEAR, 0.0, X1, CURB_FAR, 0.02, M["asphalt"])
+        hatch_ring(s, 0.0, 0.02, M["asphalt"])  # асфальт вокруг круглого проёма
+    else:
+        s.span(X0, CURB_NEAR, 0.0, X1, CURB_FAR, 0.02, M["asphalt"])
     for y0, y1 in (WALK_NEAR, WALK_FAR):
         # Плитка почти вровень с газоном: игрок ходит по плоскости z = 0, ноги не должны уходить в тротуар
         s.span(X0, y0, 0.0, X1, y1, 0.04, M["paving"])
@@ -915,5 +922,7 @@ def build():
     bpy.ops.export_scene.gltf(filepath=OUT_GLB, export_format="GLB", export_extras=True, export_apply=True)
 
 
-build()
-print("Готово:", OUT_GLB, OUT_BLEND)
+# Сцена «Вечерний город» (build_evening.py) берёт отсюда улицу, дома, деревья и кусты — при импорте не собираем
+if __name__ == "__main__":
+    build()
+    print("Готово:", OUT_GLB, OUT_BLEND)
