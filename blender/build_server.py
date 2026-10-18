@@ -1,6 +1,6 @@
 """
 Локация 4 «Серверная»: помещение с окном и четырьмя рядами серверных стоек вдоль левой стены
-(server_rack.glb — prep_static.py).
+(server_rack.glb — prep_static.py); у правой стены — два монтёра за компьютерами (monter_za_compom.glb).
 Фальшпол из плиток 60 × 60 см, светлые стены, потолок со светильниками, металлическая дверь, окно
 с подоконником и радиатором. За окном двор: квартал gorodskie_doma.glb и деревья из локации 2.
 
@@ -31,6 +31,7 @@ ROOT = city.ROOT
 OUT_GLB = os.path.join(ROOT, "public", "models", "server.glb")
 OUT_BLEND = os.path.join(ROOT, "blender", "server_base.blend")
 RACK_GLB = os.path.join(ROOT, "blender", "assets", "server_rack.glb")
+DESK_GLB = os.path.join(ROOT, "blender", "assets", "monter_za_compom.glb")
 
 W, D, H = 16.0, 12.0, 3.6        # помещение: ширина по X, глубина по Y, высота
 WALL = 0.25                      # толщина стен
@@ -46,6 +47,10 @@ RACK_W, RACK_D = 0.95, 0.93
 RACK_AISLE = 1.4
 RACKS = [(-W / 2 + 0.3 + RACK_D / 2 + r * (RACK_D + RACK_AISLE), (k - 1.5) * RACK_W, math.pi / 2)
          for r in range(4) for k in range(4)]
+# Рабочие места у правой стены (x = W/2): стол монитором к стене, монтёр спиной к комнате. В файле монитор на −Y,
+# край стола с монитором — в 0,71 м от центра модели; поворот на 90° ставит −Y модели на +X сцены (к стене)
+DESK_EDGE = 0.71
+DESKS = [(W / 2 - 0.05 - DESK_EDGE, y, math.pi / 2) for y in (-0.9, 0.9)]
 LAMPS = [(x, y) for x in (-5.0, 0.0, 5.0) for y in (-3.5, 0.0, 3.5)]  # потолочные светильники 60 × 60 см
 
 random.seed(4)
@@ -187,13 +192,13 @@ def build_outside(M):
     city.clone_parts(city.DEREVYA_GLB, trees)
 
 
-def build_racks():
-    """Стойки — копии одной модели (меш и текстуры общие); каждая — препятствие"""
+def place_copies(path, prefix, spots):
+    """Копии одной модели (меш и текстуры общие) по местам (x, y, поворот); каждая — препятствие"""
     first = None
-    for i, (x, y, rz) in enumerate(RACKS):
-        name = f"wall_server_{i}"
+    for i, (x, y, rz) in enumerate(spots):
+        name = f"{prefix}_{i}"
         if first is None:
-            first = city.place_model(RACK_GLB, name, (x, y), rz, smooth=True)
+            first = city.place_model(path, name, (x, y), rz, smooth=True)
             continue
         root = first[0].parent.copy()
         root.name = name
@@ -214,7 +219,8 @@ def build():
     build_ceiling(M)
     build_window(M)
     build_door(M)
-    build_racks()
+    place_copies(RACK_GLB, "wall_server", RACKS)
+    place_copies(DESK_GLB, "wall_desk", DESKS)
     build_outside(M)
 
     empty("spawn_A", (sum(DOOR_X) / 2, -D / 2 + 2.8, 0))  # перед дверью, чтобы камере за спиной хватало места

@@ -43,6 +43,8 @@ MODELS = {
     "monter_otvertka": ("monter_s_otvertkoi.glb", "monter_otvertka.glb", 1.8, 0.04),
     # Серверная стойка 42U с оборудованием и кабелями, фасадом к −Y; высота 2 м (серверная, build_server.py)
     "server": ("servera.glb", "server_rack.glb", 2.0, 0.05, True),
+    # Монтёр сидит за столом с компьютером, лицом к монитору на −Y; выше всего — макушка сидящего (1,32 м)
+    "monter_comp": ("monter_za_compom.glb", "monter_za_compom.glb", 1.32, 0.04),
 }
 
 
