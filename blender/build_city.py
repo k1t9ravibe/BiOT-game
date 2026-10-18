@@ -30,7 +30,9 @@ import os
 import random
 import sys
 
+import bmesh
 import bpy
+from mathutils import Matrix
 from mathutils import Vector as V
 
 sys.path.insert(0, os.path.dirname(__file__))
@@ -54,6 +56,13 @@ TEMPLATES_X = -400         # образцы машин и пешеходов с�
 # Модель 3,1 × 2,8 м стоит вдоль дороги, её край — в 0,2 м от бордюра; шахта утоплена под асфальт
 KOLODEC_POS = (62.0, CURB_NEAR + 0.35 + 1.38)
 KOLODEC_SINK = 0.3
+# Горловина люка в модели смещена от её центра; под ней в асфальте проём и шахта с дном. Монтёр в люке
+# опущен в шахту и стоит на дне — над кольцом видны голова и плечи
+HATCH = (KOLODEC_POS[0] + 0.14, KOLODEC_POS[1] + 0.08)
+HATCH_R = 0.5         # внутренний радиус горловины и шахты
+HATCH_CUT = 0.55      # радиус проёма в асфальте — край прячется под бетонным кольцом модели
+HATCH_SQUARE = 0.95   # полуширина квадратного выреза в асфальте и земле (круг вписан в него)
+SHAFT_DROP = 0.75     # на столько опущен монтёр; дно шахты — под его ногами
 PLACE_VEHICLES = False     # машины пока убраны: скорая, пожарная и поток на дороге (образцы car_tpl_*)
 
 
@@ -131,12 +140,13 @@ def city_materials():
 
 def build_street():
     g = MB("ground")
-    g.span(X0 - 200, -700, -0.05, X1 + 260, 700, -0.01, M["ground"])
+    span_with_hole(g, X0 - 200, -700, -0.05, X1 + 260, 700, -0.01, M["ground"])
     g.span(X0, -40, -0.01, X1, WALK_NEAR[0], 0.0, M["lawn"])
     g.build()
 
     s = MB("street")
-    s.span(X0, CURB_NEAR, 0.0, X1, CURB_FAR, 0.02, M["asphalt"])
+    span_with_hole(s, X0, CURB_NEAR, 0.0, X1, CURB_FAR, 0.02, M["asphalt"])
+    hatch_ring(s, 0.0, 0.02, M["asphalt"])  # асфальт вокруг круглого проёма
     for y0, y1 in (WALK_NEAR, WALK_FAR):
         # Плитка почти вровень с газоном: игрок ходит по плоскости z = 0, ноги не должны уходить в тротуар
         s.span(X0, y0, 0.0, X1, y1, 0.04, M["paving"])
@@ -156,6 +166,31 @@ def build_street():
     empty("lane_near", (0, LANE_NEAR, 0))
     empty("lane_far", (0, LANE_FAR, 0))
     empty("walk_far", (0, 6.0, 0.04))  # по дальнему тротуару ходят прохожие; ближний — для игрока
+
+
+def span_with_hole(mb, x0, y0, z0, x1, y1, z1, m):
+    """Брусок с квадратным вырезом под люком"""
+    hx, hy, a = *HATCH, HATCH_SQUARE
+    mb.span(x0, y0, z0, hx - a, y1, z1, m)
+    mb.span(hx + a, y0, z0, x1, y1, z1, m)
+    mb.span(hx - a, y0, z0, hx + a, hy - a, z1, m)
+    mb.span(hx - a, hy + a, z0, hx + a, y1, z1, m)
+
+
+def hatch_ring(mb, z0, z1, m, n=24):
+    """Плита между квадратным вырезом и круглым проёмом радиуса HATCH_CUT: верх и стенка проёма"""
+    hx, hy = HATCH
+    pts, faces = [], []
+    for k in range(n):
+        a = 2 * math.pi * k / n
+        c, s = math.cos(a), math.sin(a)
+        t = HATCH_SQUARE / max(abs(c), abs(s))  # луч до края квадрата
+        pts += [(hx + c * HATCH_CUT, hy + s * HATCH_CUT, z1), (hx + c * t, hy + s * t, z1),
+                (hx + c * HATCH_CUT, hy + s * HATCH_CUT, z0)]
+    for k in range(n):
+        i, j = 3 * k, 3 * ((k + 1) % n)
+        faces += [(i, i + 1, j + 1, j), (i + 2, i, j, j + 2)]
+    mb.poly(pts, faces, m)
 
 
 def lamp(mb, x, y, arm):
@@ -700,13 +735,70 @@ def build_manhole_work():
     dva_montera_kolodec.glb (prep_static.py): люк с крышкой, ограждение, знак, монтёр в люке и монтёр
     с газоанализатором. Ограждением и знаком смотрит на тротуар (−Y)"""
     kx = KOLODEC_POS[0]
-    place_model(KOLODEC_GLB, "wall_kolodec", KOLODEC_POS, 0, base_z=0.02 - KOLODEC_SINK, smooth=True)  # 0,02 м — асфальт
+    meshes = place_model(KOLODEC_GLB, "wall_kolodec", KOLODEC_POS, 0, base_z=0.02 - KOLODEC_SINK, smooth=True)  # 0,02 м — асфальт
+    feet = lower_hatch_worker(meshes[0])
+    build_shaft(feet - SHAFT_DROP)
 
     empty("spawn_A", (20.0, -11.0, 0))  # на газоне: прямой путь до колодца свободен от изгороди и скамеек
     empty("goal_B", (kx, CURB_NEAR - 1.1, 0))  # на тротуаре напротив колодца
-    # Где может ходить игрок: ближний тротуар и газон до живой изгороди (на проезжую часть — нельзя)
+    # Где может ходить игрок: газон до живой изгороди, ближний тротуар и проезжая часть до дальнего бордюра
     empty("walk_min", (8, -15.0, 0))
-    empty("walk_max", (170, -3.4, 0))
+    empty("walk_max", (170, CURB_FAR - 0.4, 0))
+
+
+def lower_hatch_worker(o):
+    """Отделяет от модели монтёра в горловине и опускает его в шахту; мелкое дно шахты модели убирает.
+    Возвращает высоту его подошв до опускания"""
+    bpy.context.view_layer.update()
+    mw = o.matrix_world
+    hatch = V(HATCH)
+    inside = lambda f: (mw @ f.calc_center_median()).xy - hatch
+    worker = o.copy()
+    worker.data = o.data.copy()
+    worker.name = "kolodec_worker_in_hatch"
+    bpy.context.collection.objects.link(worker)
+    for ob, keep_inner in ((o, False), (worker, True)):
+        bm = bmesh.new()
+        bm.from_mesh(ob.data)
+        drop = []
+        for f in bm.faces:
+            c = mw @ f.calc_center_median()
+            inner = (c.xy - hatch).length < HATCH_R - 0.02
+            if inner and c.z < -0.15:  # дно шахты модели
+                drop.append(f)
+            elif inner != keep_inner:
+                drop.append(f)
+        bmesh.ops.delete(bm, geom=drop, context="FACES")
+        if keep_inner:
+            feet = min((mw @ v.co).z for v in bm.verts)
+        bm.to_mesh(ob.data)
+        bm.free()
+    worker.matrix_world = Matrix.Translation((0, 0, -SHAFT_DROP)) @ mw
+    return feet
+
+
+def build_shaft(bottom, n=24):
+    """Шахта колодца под горловиной: бетонные стенки (нормали внутрь), на дне грязь и кабели"""
+    hx, hy = HATCH
+    top = 0.0
+    wall = mat("Стенки колодца", "#6F6B64", rough=0.95)
+    mud = mat("Дно колодца", "#2E2A24", rough=1.0)
+    mb = MB("kolodec_shaft")
+    pts, faces = [], []
+    for k in range(n):
+        a = 2 * math.pi * k / n
+        pts += [(hx + math.cos(a) * HATCH_R, hy + math.sin(a) * HATCH_R, top),
+                (hx + math.cos(a) * HATCH_R, hy + math.sin(a) * HATCH_R, bottom)]
+    for k in range(n):
+        i, j = 2 * k, 2 * ((k + 1) % n)
+        faces.append((i, j, j + 1, i + 1))
+    mb.poly(pts, faces, wall)
+    mb.poly([(hx + math.cos(2 * math.pi * k / n) * HATCH_R, hy + math.sin(2 * math.pi * k / n) * HATCH_R, bottom)
+             for k in range(n)], [tuple(range(n))], mud)
+    for k, dz in enumerate((0.25, 0.4)):  # кабели вдоль стенки
+        z = bottom + dz
+        mb.beam((hx - HATCH_R + 0.05, hy - 0.25 + k * 0.12, z), (hx - HATCH_R + 0.05, hy + 0.3, z), 0.05, 0.05, M["dark"])
+    mb.build(recalc=False)
 
 
 # ---------- Образцы машин и пешеходов (игра их клонирует) ----------
