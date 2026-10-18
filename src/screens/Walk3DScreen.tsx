@@ -66,7 +66,7 @@ export const SCENES: Record<string, SceneConfig> = {
     taskId: 'server',
     title: 'Серверная',
     route: 'Пройдите от двери (A) к окну (B).',
-    options: { fog: [40, 200], far: 400, sky: ROOM_SKY, room: { ceiling: 3.2, wallGap: 0.25 }, ambient: serverAmbient },
+    options: { fog: [40, 200], far: 400, sky: ROOM_SKY, room: { ceiling: 3.6, wallGap: 0.25, camDist: 5 }, ambient: serverAmbient },
   },
   t1: { tasksUrl: config.tasksUrl, taskId: 't1', title: 'Опора у сельской АТС', route: 'Дойдите от фургона (A) до опоры (B).' },
 }

@@ -42,9 +42,9 @@ export interface WalkOptions {
   sunFollow?: boolean
   /** Что видно в руках «от первого лица» у объекта со свойством look (кнопка Q) */
   povRig?: (id: string) => { group: THREE.Object3D; update: (t: number) => void }
-  /** Помещение: камера ближе и ниже потолка (высота, м) и не выходит за стены — за зону walk_min / walk_max
-   *  дальше, чем на wallGap */
-  room?: { ceiling: number; wallGap: number }
+  /** Помещение: камера ниже потолка (высота, м), на расстоянии camDist от игрока и не выходит за стены —
+   *  за зону walk_min / walk_max дальше, чем на wallGap */
+  room?: { ceiling: number; wallGap: number; camDist: number }
   /** «Живые» детали сцены: создаются после загрузки, update вызывается каждый кадр */
   ambient?: (root: THREE.Object3D, scene: THREE.Scene) => { update: (dt: number, t: number) => void }
 }
@@ -123,7 +123,7 @@ export class WalkEngine {
     this.cb = cb
     this.opts = opts
     this.camera.far = opts.far ?? 200
-    if (opts.room) this.camDist = 3.2
+    if (opts.room) this.camDist = opts.room.camDist
     this.camera.updateProjectionMatrix()
     this.renderer = new THREE.WebGLRenderer({ antialias: true })
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
@@ -332,7 +332,7 @@ export class WalkEngine {
   }
   private onWheel = (e: WheelEvent) => {
     e.preventDefault()
-    const [lo, hi] = this.opts.room ? [1.8, 4.5] : [3.5, 11]
+    const [lo, hi] = this.opts.room ? [2.5, 7] : [3.5, 11]
     this.camDist = THREE.MathUtils.clamp(this.camDist + e.deltaY * 0.005, lo, hi)
   }
 
@@ -512,7 +512,7 @@ export class WalkEngine {
     if (room) {
       // В помещении камера под потолком и внутри стен: прижимается к стене, а не уходит за неё
       const b = this.bounds
-      target.y = Math.min(p.y + 2.1, room.ceiling - 0.3)
+      target.y = Math.min(p.y + 2.7, room.ceiling - 0.3)
       target.x = THREE.MathUtils.clamp(target.x, b.minX - room.wallGap, b.maxX + room.wallGap)
       target.z = THREE.MathUtils.clamp(target.z, b.minZ - room.wallGap, b.maxZ + room.wallGap)
     }

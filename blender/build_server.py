@@ -30,14 +30,14 @@ ROOT = city.ROOT
 OUT_GLB = os.path.join(ROOT, "public", "models", "server.glb")
 OUT_BLEND = os.path.join(ROOT, "blender", "server_base.blend")
 
-W, D, H = 10.0, 8.0, 3.2         # помещение: ширина по X, глубина по Y, высота
+W, D, H = 16.0, 12.0, 3.6        # помещение: ширина по X, глубина по Y, высота
 WALL = 0.25                      # толщина стен
 TILE = 0.6                       # плитка фальшпола
-WINDOW_X = (-1.5, 1.5)           # проём окна в стене +Y
-WINDOW_Z = (0.9, 2.4)
-DOOR_X = (2.6, 3.6)              # проём двери в стене −Y
+WINDOW_X = (-2.0, 2.0)           # проём окна в стене +Y
+WINDOW_Z = (0.9, 2.6)
+DOOR_X = (5.5, 6.5)              # проём двери в стене −Y
 DOOR_H = 2.1
-LAMPS = [(x, y) for x in (-2.5, 2.5) for y in (-2.0, 0.5, 3.0)]  # потолочные светильники 60 × 60 см
+LAMPS = [(x, y) for x in (-5.0, 0.0, 5.0) for y in (-3.5, 0.0, 3.5)]  # потолочные светильники 60 × 60 см
 
 random.seed(4)
 
@@ -144,7 +144,7 @@ def build_window(M):
     g.build()["no_shadow"] = 1
     sill = MB("wall_window_sill")  # подоконник и радиатор под окном
     sill.span(xa - 0.1, D / 2 - 0.25, za - 0.04, xb + 0.1, D / 2 + 0.02, za, M["sill"])
-    for k in range(12):
+    for k in range(int((xb - xa - 0.4) / 0.21)):
         x = xa + 0.25 + k * 0.21
         sill.span(x - 0.04, D / 2 - 0.12, 0.2, x + 0.04, D / 2 - 0.04, 0.75, M["radiator"])
     sill.build()
@@ -188,7 +188,7 @@ def build():
     build_door(M)
     build_outside(M)
 
-    empty("spawn_A", (3.1, -D / 2 + 0.8, 0))  # у двери
+    empty("spawn_A", (sum(DOOR_X) / 2, -D / 2 + 2.8, 0))  # перед дверью, чтобы камере за спиной хватало места
     empty("goal_B", (0.0, D / 2 - 0.9, 0))    # у окна
     m = 0.45  # от стен — радиус игрока с запасом
     empty("walk_min", (-W / 2 + m, -D / 2 + m, 0))
