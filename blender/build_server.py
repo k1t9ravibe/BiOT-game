@@ -32,6 +32,7 @@ OUT_GLB = os.path.join(ROOT, "public", "models", "server.glb")
 OUT_BLEND = os.path.join(ROOT, "blender", "server_base.blend")
 RACK_GLB = os.path.join(ROOT, "blender", "assets", "server_rack.glb")
 DESK_GLB = os.path.join(ROOT, "blender", "assets", "monter_za_compom.glb")
+TUSHIT_GLB = os.path.join(ROOT, "blender", "assets", "monter_tushit_server.glb")
 
 W, D, H = 16.0, 12.0, 3.6        # помещение: ширина по X, глубина по Y, высота
 WALL = 0.25                      # толщина стен
@@ -47,6 +48,13 @@ RACK_W, RACK_D = 0.95, 0.93
 RACK_AISLE = 1.4
 RACKS = [(-W / 2 + 0.3 + RACK_D / 2 + r * (RACK_D + RACK_AISLE), (k - 1.5) * RACK_W, math.pi / 2)
          for r in range(4) for k in range(4)]
+# Вместо крайней стойки переднего ряда (со стороны двери) — сцена «монтёр льёт воду в стойку». Стойка в этой модели
+# крупнее (1,15 × 1,15 м): в файле её центр (0,63; 0,04), фасад к −X; поворот на 180° — фасадом к +X, в проход.
+# Задняя стенка — на одной линии с рядом, край — вплотную к соседней стойке
+TUSHIT_RACK = (0.63, 0.04)
+TUSHIT_RACK_SIZE = 1.15
+_front_x, _front_y, _ = RACKS.pop(12)  # ряд r = 3, место k = 0
+TUSHIT_CENTER = (_front_x - RACK_D / 2 + TUSHIT_RACK_SIZE / 2, _front_y + RACK_W / 2 - TUSHIT_RACK_SIZE / 2)
 # Рабочие места у правой стены (x = W/2): стол монитором к стене, монтёр спиной к комнате. В файле монитор на −Y,
 # край стола с монитором — в 0,71 м от центра модели; поворот на 90° ставит −Y модели на +X сцены (к стене)
 DESK_EDGE = 0.71
@@ -221,6 +229,8 @@ def build():
     build_door(M)
     place_copies(RACK_GLB, "wall_server", RACKS)
     place_copies(DESK_GLB, "wall_desk", DESKS)
+    (cx, cy), (rx, ry) = TUSHIT_CENTER, TUSHIT_RACK
+    city.place_model(TUSHIT_GLB, "wall_server_voda", (cx + rx, cy + ry), math.pi, smooth=True)  # (−rx, −ry) после поворота
     build_outside(M)
 
     empty("spawn_A", (sum(DOOR_X) / 2, -D / 2 + 2.8, 0))  # перед дверью, чтобы камере за спиной хватало места

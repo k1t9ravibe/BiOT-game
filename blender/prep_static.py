@@ -45,6 +45,9 @@ MODELS = {
     "server": ("servera.glb", "server_rack.glb", 2.0, 0.05, True),
     # Монтёр сидит за столом с компьютером, лицом к монитору на −Y; выше всего — макушка сидящего (1,32 м)
     "monter_comp": ("monter_za_compom.glb", "monter_za_compom.glb", 1.32, 0.04),
+    # Монтёр льёт воду из ведра в открытую стойку (нарушение); стойка фасадом к −X, монтёр перед ней;
+    # выше всего — верх стойки (2 м, как у остальных стоек)
+    "monter_tushit": ("monter_tushit_server.glb", "monter_tushit_server.glb", 2.0, 0.05, True),
 }
 
 
