@@ -32,6 +32,7 @@ ROOT = city.ROOT
 OUT_GLB = os.path.join(ROOT, "public", "models", "evening.glb")
 OUT_BLEND = os.path.join(ROOT, "blender", "evening_base.blend")
 PODEMNIK_GLB = os.path.join(ROOT, "blender", "assets", "podemnik.glb")
+MONTER_GLB = os.path.join(ROOT, "blender", "assets", "monter_otvertka.glb")
 
 # Воздушная линия 0,4 кВ: опоры на газоне между тротуаром и сквером, пролёт 30 м, траверса поперёк линии.
 # Линия ближе к тротуару, чем к скверу: между ней и бордюрами сквера помещается автовышка с выдвинутыми опорами
@@ -48,6 +49,8 @@ WIRE_R = 0.018                     # радиус провода (толще н�
 PODEMNIK_POLE_X = BROKEN[1]
 PODEMNIK_POLE = (2.34, -5.54)
 PODEMNIK_TOP_Z = 8.7                # крепление проводов на опоре модели
+PODEMNIK_RZ = math.pi / 2           # кабиной (−Y модели) к +X — к опоре BROKEN[1]
+BASKET = (0.62, -3.77, 5.27)        # центр дна корзины в координатах файла автовышки
 LAMP_LIGHT_X = (0, 150)            # точечный свет только у фонарей вдоль маршрута игрока — дальше хватает пятен
 
 
@@ -120,12 +123,22 @@ def build_broken_wire():
     mb.build()["inspect_range"] = 8.0
 
 
-def place_podemnik():
-    rz = math.pi / 2  # кабиной (−Y модели) к +X — к опоре BROKEN[1]
+def podemnik_to_scene(x, y):
+    """Точка из координат файла автовышки → координаты сцены (опора модели — на месте опоры линии)"""
+    c, s = math.cos(PODEMNIK_RZ), math.sin(PODEMNIK_RZ)
     px, py = PODEMNIK_POLE
-    c, s = math.cos(rz), math.sin(rz)
-    origin = (PODEMNIK_POLE_X - (px * c - py * s), LINE_Y - (px * s + py * c))
-    city.place_model(PODEMNIK_GLB, "wall_podemnik", origin, rz, smooth=True)
+    dx, dy = x - px, y - py
+    return (PODEMNIK_POLE_X + dx * c - dy * s, LINE_Y + dx * s + dy * c)
+
+
+def place_podemnik():
+    city.place_model(PODEMNIK_GLB, "wall_podemnik", podemnik_to_scene(0, 0), PODEMNIK_RZ, smooth=True)
+    # Монтёр стоит в корзине лицом к опоре с проводами (в файле монтёр смотрит на +X)
+    bx, by, bz = BASKET
+    px, py = PODEMNIK_POLE
+    face = math.atan2(py - by, px - bx) + PODEMNIK_RZ
+    city.place_model(MONTER_GLB, "monter_v_korzine", podemnik_to_scene(bx, by), face, base_z=bz, solid=False,
+                     smooth=True)
 
 
 def build_lamp_lights():

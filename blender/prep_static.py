@@ -39,6 +39,8 @@ MODELS = {
     "lestnica": ("lestnica_i_dga.glb", "lestnica_dga.glb", 0.6, 0.03),
     # Автобусная остановка: навес, стеклянные стенки, скамейка, урна, знак на столбе (он выше всего); скамейка — на −Y
     "ostanovka": ("avtobusnaya_ostanovka.glb", "avtobusnaya_ostanovka.glb", 2.9, 0.03),
+    # Монтёр без каски с отвёрткой в руках, лицом к +X — работает в корзине автовышки (build_evening.py)
+    "monter_otvertka": ("monter_s_otvertkoi.glb", "monter_otvertka.glb", 1.8, 0.04),
 }
 
 
