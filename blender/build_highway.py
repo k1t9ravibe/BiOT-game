@@ -220,11 +220,11 @@ def build_fallen():
 
 def build_trees():
     trees, kusty = [], []
-    for side in (1,):  # справа по ходу игрока (−Y) деревьев нет — там линия и кабелеукладчик
+    for side in (-1, 1):
         x = X0
         while x < X1:
             x += random.uniform(5, 11)
-            near = 13 if side < 0 else 9  # за линией (−Y) — дальше от опор
+            near = 20 if side < 0 else 9  # справа по ходу (−Y) — лесополоса за линией и кабелеукладчиком
             y = side * random.uniform(near, near + 9)
             trees.append((random.choice(("tree_bereza", "tree_bereza", "tree_topol", "tree_el", "tree_el")), x, y, 0.0,
                           random.uniform(0.8, 1.15), random.uniform(0, 2 * math.pi), None))
@@ -234,7 +234,7 @@ def build_trees():
                               random.uniform(0, 2 * math.pi), None))
             if random.random() < 0.35:
                 kusty.append((random.choice(("kusty_para", "kust_na_podlozhke")), x + random.uniform(-2, 2),
-                              side * random.uniform(7, near - 1), -0.15, 1.0, random.uniform(0, 2 * math.pi), None))
+                              side * (random.uniform(7, near - 1) if side > 0 else random.uniform(18, 21)), -0.15, 1.0, random.uniform(0, 2 * math.pi), None))
     city.clone_parts(city.DEREVYA_GLB, trees)
     city.clone_parts(city.KUSTY_GLB, kusty)
 
