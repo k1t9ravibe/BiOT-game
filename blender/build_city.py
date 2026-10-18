@@ -36,13 +36,13 @@ from mathutils import Matrix
 from mathutils import Vector as V
 
 sys.path.insert(0, os.path.dirname(__file__))
-from lowpoly import (M, MB, base_materials, empty, gable, mat, picket_fence, place_model,  # noqa: E402
-                     principled, rad, srgb, tree, window)
+from lowpoly import M, MB, base_materials, empty, mat, place_model, principled, rad, srgb, tree  # noqa: E402
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 OUT_GLB = os.path.join(ROOT, "public", "models", "city.glb")
 OUT_BLEND = os.path.join(ROOT, "blender", "city_base.blend")
 KOLODEC_GLB = os.path.join(ROOT, "blender", "assets", "dva_montera_kolodec.glb")
+DOMA_GLB = os.path.join(ROOT, "blender", "assets", "gorodskie_doma.glb")
 
 random.seed(11)
 
@@ -56,13 +56,20 @@ TEMPLATES_X = -400         # образцы машин и пешеходов с�
 # Модель 3,1 × 2,8 м стоит вдоль дороги, её край — в 0,2 м от бордюра; шахта утоплена под асфальт
 KOLODEC_POS = (62.0, CURB_NEAR + 0.35 + 1.38)
 KOLODEC_SINK = 0.3
-# Горловина люка в модели смещена от её центра; под ней в асфальте проём и шахта с дном. Монтёр в люке
-# опущен в шахту и стоит на дне — над кольцом видны голова и плечи
+# Горловина люка в модели смещена от её центра; под ней в асфальте проём и глубокая тёмная шахта. Монтёр
+# сидит на дальнем краю горловины, лицом к тротуару, ноги свешены в пустоту
 HATCH = (KOLODEC_POS[0] + 0.14, KOLODEC_POS[1] + 0.08)
 HATCH_R = 0.5         # внутренний радиус горловины и шахты
 HATCH_CUT = 0.55      # радиус проёма в асфальте — край прячется под бетонным кольцом модели
 HATCH_SQUARE = 0.95   # полуширина квадратного выреза в асфальте и земле (круг вписан в него)
-SHAFT_DROP = 0.75     # на столько опущен монтёр; дно шахты — под его ногами
+WORKER_SHIFT = (0.0, 0.3, 0.06)  # сдвиг монтёра из модели на край горловины, м
+SHAFT_DEPTH = 2.6     # глубина шахты
+# Квартал gorodskie_doma.glb (четыре пятиэтажки на общей подложке, 60,7 × 28,3 м, высота 18 м) — все жилые дома.
+# Кварталы стоят рядами вдоль улицы, фасадами к ней; (x центра, y края подложки со стороны улицы)
+DOMA_SIZE = (60.7, 28.3)
+DOMA_FAR = [(-66.0, 8.8), (-2.0, 8.8)]  # дальняя сторона до поликлиники (x ≥ 33)
+DOMA_NEAR = [(-30.0 + 64 * k, -30.0) for k in range(5)]  # за сквером ближней стороны
+DOMA_MID = [(-40.0 + 64 * k, 76.0) for k in range(5)]  # средний план за зданиями-организациями
 PLACE_VEHICLES = False     # машины пока убраны: скорая, пожарная и поток на дороге (образцы car_tpl_*)
 
 
@@ -250,7 +257,7 @@ def street_furniture():
 
 
 def build_near_side():
-    """Ближняя сторона улицы (раньше была за камерой): живая изгородь по краю газона, сквер, пятиэтажки"""
+    """Ближняя сторона улицы (раньше была за камерой): живая изгородь по краю газона, сквер; дома — build_doma"""
     mb = MB("near_side")
     trunks, crowns = MB("near_side_trunks"), MB("near_side_crowns")
     mb.span(X0, -16.3, 0, X1, -15.5, 1.1, M["leaf"])  # граница прогулочной зоны игрока
@@ -259,15 +266,6 @@ def build_near_side():
         x = X0 + 4 + k * 7.5 + random.uniform(-2, 2)
         y = random.uniform(-25, -18)
         tree(trunks, crowns, random.choice(("tree", "birch", "pine", "tree")), x, y, s=random.uniform(0.8, 1.1))
-    for k, x in enumerate(range(X0 + 6, X1, 26)):
-        h = random.choice((15.5, 15.5, 27))
-        m = M[random.choice(("block_a", "block_b", "block_c"))]
-        y0, y1 = -44, -32
-        mb.span(x, y0, 0, x + 20, y1, h, m)
-        mb.span(x - 0.2, y0 - 0.2, h, x + 20.2, y1 + 0.2, h + 0.5, M["white"])
-        for z in range(2, int(h) - 1, 3):
-            for c in range(9):
-                mb.box((x + 1.2 + c * 2.2, y1 + 0.03, z + 0.4), (1.1, 0.06, 1.3), M["glass"])
     mb.build()
     trunks.build()
     crowns.build()
@@ -283,49 +281,25 @@ def blink(name, parent, c, w, h, depth_axis="y"):
 
 # ---------- 1. Жилые дома (как в сцене 1) ----------
 
-def city_house(mb, x, yf, floors, roof, parent, tag, blink_count):
-    """Дом из сцены 1, фасадом к улице; floors — 1 или 2 этажа"""
-    w, d = 7.6, 6.0
-    x0, x1, y0, y1 = x - w / 2, x + w / 2, yf, yf + d
-    top = 3.0 if floors == 1 else 5.8
-    mb.span(x0 - 0.12, y0 - 0.12, 0, x1 + 0.12, y1 + 0.12, 0.5, M["plinth"])
-    mb.span(x0, y0, 0.4, x1, y1, top, M["plaster"])
-    eave, ridge, over = top - 0.25, top + 1.75, 0.6
-    for ye in (y0 - over, y1 + over):
-        mb.beam((x, ye, eave), (x, (y0 + y1) / 2, ridge), w + 2 * over, 0.12, roof, side=(1, 0, 0))
-    mb.beam((x0 - over, (y0 + y1) / 2, ridge + 0.04), (x1 + over, (y0 + y1) / 2, ridge + 0.04), 0.28, 0.16, roof)
-    for xe, xo, s in ((x0, x0 + 0.15, -1), (x1, x1 - 0.15, 1)):
-        gable(mb, xe - s * 0.02, xo, y0, y1, top, ridge - 0.12, M["gable"])
-    rows = [1.75] if floors == 1 else [1.75, 4.45]
-    panes = []
-    for z in rows:
-        for wx in (x - 2.6, x - 0.9, x + 2.6) if z == 1.75 else (x - 2.4, x, x + 2.4):
-            window(mb, (wx, y0), (0, -1, 0), (1, 0, 0), z)
-            panes.append((wx, z))
-    dx = x + 0.9
-    mb.box((dx, y0 - 0.03, 1.5), (1.0, 0.06, 2.0), M["door"])
-    mb.span(dx - 0.95, y0 - 1.3, 0, dx + 0.95, y0, 0.45, M["concrete"])
-    mb.beam((dx, y0, 2.68), (dx, y0 - 1.3, 2.5), 2.0, 0.08, roof, side=(1, 0, 0))
-    mb.box((x - 1.5, y0 + 3.2, ridge + 0.2), (0.5, 0.5, 1.6), M["brick"])
-    random.shuffle(panes)
-    for k, (wx, z) in enumerate(panes[:blink_count]):
-        blink(f"win_{tag}_{x:.0f}_{k}", parent, (wx, y0 - 0.06, z), 0.9, 1.1)
-
-
-def build_houses():
-    p = empty("bld_houses")
-    mb = MB("houses")
-    trunks, crowns = MB("houses_tree_trunks"), MB("houses_tree_crowns")
-    for x, floors, roof in ((5, 1, M["roof"]), (15, 2, M["roof_red"]), (25, 1, M["roof_blue"])):
-        city_house(mb, x, 12.5, floors, roof, p, "houses", 2)
-        picket_fence(mb, (x - 4.8, 9.4), (x + 0.3, 9.4))
-        picket_fence(mb, (x + 1.5, 9.4), (x + 4.8, 9.4))
-        mb.span(x - 4.8, 8.6, 0, x + 4.8, 12.5, 0.03, M["lawn"])
-        mb.span(x + 0.3, 9.2, 0, x + 1.5, 12.5, 0.05, M["paving_dark"])
-        tree(trunks, crowns, "apple", x - 3.0, 10.9, s=0.8)
-    mb.build(parent=p)
-    trunks.build(parent=p)
-    crowns.build(parent=p)
+def build_doma():
+    """Жилые кварталы — копии одной модели gorodskie_doma.glb (меш и текстуры общие) рядами вдоль улицы"""
+    rows = [(x, y + DOMA_SIZE[1] / 2, 0) for x, y in DOMA_FAR + DOMA_MID]
+    rows += [(x, y - DOMA_SIZE[1] / 2, math.pi) for x, y in DOMA_NEAR]  # ближняя сторона смотрит на +Y
+    first = None
+    for i, (x, y, rz) in enumerate(rows):
+        name = f"doma_{i}"
+        if first is None:
+            first = place_model(DOMA_GLB, name, (x, y), rz, solid=False, smooth=True)
+            continue
+        root = first[0].parent.copy()
+        root.name = name
+        root.location.x, root.location.y = x, y
+        root.rotation_euler.z = rz
+        bpy.context.collection.objects.link(root)
+        for o in first:
+            c = o.copy()  # данные меша общие
+            c.parent = root
+            bpy.context.collection.objects.link(c)
 
 
 # ---------- 2. Поликлиника ----------
@@ -689,21 +663,6 @@ def build_factory():
 # ---------- Город на фоне: дома среднего плана и силуэты высоток ----------
 
 def build_backdrop():
-    mid = MB("city_mid_blocks")
-    blocks = [(-38, 16, 22, "block_a"), (-14, 14, 30, "block_b"), (8, 18, 19, "block_c"), (40, 14, 26, "block_b"),
-              (64, 12, 33, "block_a"), (116, 14, 15, "block_c"), (150, 16, 21, "block_b"), (192, 18, 28, "block_a"),
-              (216, 14, 18, "block_c")]
-    for x, w, h, m in blocks:
-        y0 = 78 + random.uniform(-3, 5)  # средний план — заметно дальше зданий-организаций
-        h *= 0.75
-        mid.span(x - w / 2, y0, 0, x + w / 2, y0 + 12, h, M[m])
-        mid.span(x - w / 2 - 0.2, y0 - 0.2, h, x + w / 2 + 0.2, y0 + 12.2, h + 0.5, M["white"])
-        for z in range(2, int(h) - 1, 3):  # сетка окон
-            for k in range(int(w / 2.2)):
-                wx = x - w / 2 + 1.1 + k * 2.2
-                mid.box((wx, y0 - 0.03, z + 0.4), (1.1, 0.06, 1.3), M["glass"])
-    mid.build()
-
     sky = MB("city_skyline")
     mats = ("sky_a", "sky_b", "sky_c")
     for side in (1, -1):  # силуэты высоток по обе стороны улицы — игрок может оглянуться
@@ -736,8 +695,8 @@ def build_manhole_work():
     с газоанализатором. Ограждением и знаком смотрит на тротуар (−Y)"""
     kx = KOLODEC_POS[0]
     meshes = place_model(KOLODEC_GLB, "wall_kolodec", KOLODEC_POS, 0, base_z=0.02 - KOLODEC_SINK, smooth=True)  # 0,02 м — асфальт
-    feet = lower_hatch_worker(meshes[0])
-    build_shaft(feet - SHAFT_DROP)
+    move_hatch_worker(meshes[0])
+    build_shaft(-SHAFT_DEPTH)
 
     empty("spawn_A", (20.0, -11.0, 0))  # на газоне: прямой путь до колодца свободен от изгороди и скамеек
     empty("goal_B", (kx, CURB_NEAR - 1.1, 0))  # на тротуаре напротив колодца
@@ -746,9 +705,9 @@ def build_manhole_work():
     empty("walk_max", (170, CURB_FAR - 0.4, 0))
 
 
-def lower_hatch_worker(o):
-    """Отделяет от модели монтёра в горловине и опускает его в шахту; мелкое дно шахты модели убирает.
-    Возвращает высоту его подошв до опускания"""
+def move_hatch_worker(o):
+    """Отделяет от модели монтёра в горловине и пересаживает на край (WORKER_SHIFT); мелкое дно шахты
+    модели убирает — под ногами монтёра остаётся пустота"""
     bpy.context.view_layer.update()
     mw = o.matrix_world
     hatch = V(HATCH)
@@ -769,20 +728,17 @@ def lower_hatch_worker(o):
             elif inner != keep_inner:
                 drop.append(f)
         bmesh.ops.delete(bm, geom=drop, context="FACES")
-        if keep_inner:
-            feet = min((mw @ v.co).z for v in bm.verts)
         bm.to_mesh(ob.data)
         bm.free()
-    worker.matrix_world = Matrix.Translation((0, 0, -SHAFT_DROP)) @ mw
-    return feet
+    worker.matrix_world = Matrix.Translation(WORKER_SHIFT) @ mw
 
 
 def build_shaft(bottom, n=24):
-    """Шахта колодца под горловиной: бетонные стенки (нормали внутрь), на дне грязь и кабели"""
+    """Шахта колодца под горловиной: тёмные бетонные стенки (нормали внутрь), чёрное дно, кабели по стенке"""
     hx, hy = HATCH
     top = 0.0
-    wall = mat("Стенки колодца", "#6F6B64", rough=0.95)
-    mud = mat("Дно колодца", "#2E2A24", rough=1.0)
+    wall = mat("Стенки колодца", "#3A3833", rough=0.95)
+    mud = mat("Дно колодца", "#0A0A09", rough=1.0)
     mb = MB("kolodec_shaft")
     pts, faces = [], []
     for k in range(n):
@@ -795,7 +751,7 @@ def build_shaft(bottom, n=24):
     mb.poly(pts, faces, wall)
     mb.poly([(hx + math.cos(2 * math.pi * k / n) * HATCH_R, hy + math.sin(2 * math.pi * k / n) * HATCH_R, bottom)
              for k in range(n)], [tuple(range(n))], mud)
-    for k, dz in enumerate((0.25, 0.4)):  # кабели вдоль стенки
+    for k, dz in enumerate((0.9, 1.05)):  # кабели вдоль стенки
         z = bottom + dz
         mb.beam((hx - HATCH_R + 0.05, hy - 0.25 + k * 0.12, z), (hx - HATCH_R + 0.05, hy + 0.3, z), 0.05, 0.05, M["dark"])
     mb.build(recalc=False)
@@ -905,7 +861,7 @@ def build():
     city_materials()
     build_street()
     street_furniture()
-    build_houses()
+    build_doma()
     build_clinic()
     build_fire_station()
     build_business()
