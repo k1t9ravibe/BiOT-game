@@ -36,6 +36,8 @@ MODELS = {
     "doma": ("gorodskie_doma_dlya_scen.glb", "gorodskie_doma.glb", 18.0, 0.04),
     # Лестница колодца, лежит на земле, и бензиновый генератор (он выше всего — 0,6 м); панель генератора — на −Y
     "lestnica": ("lestnica_i_dga.glb", "lestnica_dga.glb", 0.6, 0.03),
+    # Автобусная остановка: навес, стеклянные стенки, скамейка, урна, знак на столбе (он выше всего); скамейка — на −Y
+    "ostanovka": ("avtobusnaya_ostanovka.glb", "avtobusnaya_ostanovka.glb", 2.9, 0.03),
 }
 
 

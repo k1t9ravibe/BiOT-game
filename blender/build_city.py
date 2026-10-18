@@ -45,6 +45,7 @@ OUT_BLEND = os.path.join(ROOT, "blender", "city_base.blend")
 KOLODEC_GLB = os.path.join(ROOT, "blender", "assets", "dva_montera_kolodec.glb")
 DOMA_GLB = os.path.join(ROOT, "blender", "assets", "gorodskie_doma.glb")
 LESTNICA_GLB = os.path.join(ROOT, "blender", "assets", "lestnica_dga.glb")
+OSTANOVKA_GLB = os.path.join(ROOT, "blender", "assets", "avtobusnaya_ostanovka.glb")
 
 random.seed(11)
 
@@ -241,17 +242,8 @@ def street_furniture():
         for s in (-1, 1):
             mb.box((bx + s * 0.75, -6.45, 0.3), (0.08, 0.4, 0.4), M["dark"])
         mb.build()
-    # Остановка у поликлиники
-    mb = MB("wall_bus_stop")
-    sx = 40
-    mb.span(sx - 2.5, -6.9, 2.6, sx + 2.5, -5.3, 2.75, M["white"])
-    mb.span(sx - 2.4, -6.85, 0.3, sx + 2.4, -6.8, 2.5, M["stop_glass"])
-    for s in (-1, 1):
-        mb.box((sx + s * 2.4, -6.85, 1.4), (0.08, 0.08, 2.6), M["metal"])
-    mb.box((sx, -6.55, 0.5), (3.0, 0.4, 0.06), M["wood"])
-    mb.box((sx + 2.9, -5.6, 2.8), (0.05, 0.6, 0.6), M["hoarding"])
-    mb.cyl((sx + 2.9, -5.6, 0.04), (sx + 2.9, -5.6, 2.5), 0.04, 0.04, M["metal"], n=6)
-    mb.build()
+    # Остановка у «зебры»: готовая модель 4,9 × 2,2 м (навес, скамейка, урна, знак) — скамейкой к дороге
+    place_model(OSTANOVKA_GLB, "wall_bus_stop", (40.0, -5.6), math.pi, base_z=0.04, smooth=True)  # 0,04 м — плитка
     # Светофоры у «зебры»
     for name, y, f, target in (("wall_traffic_light", CURB_NEAR - 0.4, 1, None), ("traffic_light_far", CURB_FAR + 0.4, -1, far)):
         mb = target or MB(name)
