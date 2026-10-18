@@ -1,5 +1,5 @@
 """
-Локация 4 «Серверная»: пустое помещение с окном — оборудование поставим позже (модели пришлёт заказчик).
+Локация 4 «Серверная»: помещение с окном и двумя рядами серверных стоек (server_rack.glb — prep_static.py).
 Фальшпол из плиток 60 × 60 см, светлые стены, потолок со светильниками, металлическая дверь, окно
 с подоконником и радиатором. За окном двор: квартал gorodskie_doma.glb и деревья из локации 2.
 
@@ -29,6 +29,7 @@ from lowpoly import MB, empty, mat, principled  # noqa: E402
 ROOT = city.ROOT
 OUT_GLB = os.path.join(ROOT, "public", "models", "server.glb")
 OUT_BLEND = os.path.join(ROOT, "blender", "server_base.blend")
+RACK_GLB = os.path.join(ROOT, "blender", "assets", "server_rack.glb")
 
 W, D, H = 16.0, 12.0, 3.6        # помещение: ширина по X, глубина по Y, высота
 WALL = 0.25                      # толщина стен
@@ -37,6 +38,11 @@ WINDOW_X = (-2.0, 2.0)           # проём окна в стене +Y
 WINDOW_Z = (0.9, 2.6)
 DOOR_X = (5.5, 6.5)              # проём двери в стене −Y
 DOOR_H = 2.1
+# Стойки 0,94 × 0,93 м, высота 2 м: два ряда вдоль X фасадами друг к другу, между ними холодный коридор ~1,9 м.
+# (x центра, y центра, поворот): модель смотрит фасадом на −Y, ряд у двери развёрнут к окну
+RACK_STEP = 0.95
+RACKS = ([(-1.0 + (k - 1.5) * RACK_STEP, -1.2, math.pi) for k in range(4)]
+         + [(-1.0 + (k - 1) * RACK_STEP, 1.6, 0.0) for k in range(3)])
 LAMPS = [(x, y) for x in (-5.0, 0.0, 5.0) for y in (-3.5, 0.0, 3.5)]  # потолочные светильники 60 × 60 см
 
 random.seed(4)
@@ -98,7 +104,7 @@ def wall_with_opening(mb, axis_y, x_open, z_open, m):
 
 
 def build_walls(M):
-    walls = MB("wall_room")
+    walls = MB("room_walls")  # не wall_*: рамка всех стен — вся комната; из неё не пускает зона walk_min / walk_max
     wall_with_opening(walls, D / 2, WINDOW_X, WINDOW_Z, M["wall"])
     wall_with_opening(walls, -D / 2, DOOR_X, (0, DOOR_H), M["wall"])
     for x in (-W / 2, W / 2):
@@ -178,6 +184,25 @@ def build_outside(M):
     city.clone_parts(city.DEREVYA_GLB, trees)
 
 
+def build_racks():
+    """Стойки — копии одной модели (меш и текстуры общие); каждая — препятствие"""
+    first = None
+    for i, (x, y, rz) in enumerate(RACKS):
+        name = f"wall_server_{i}"
+        if first is None:
+            first = city.place_model(RACK_GLB, name, (x, y), rz, smooth=True)
+            continue
+        root = first[0].parent.copy()
+        root.name = name
+        root.location.x, root.location.y = x, y
+        root.rotation_euler.z = rz
+        bpy.context.collection.objects.link(root)
+        for o in first:
+            c = o.copy()
+            c.parent = root
+            bpy.context.collection.objects.link(c)
+
+
 def build():
     bpy.ops.wm.read_factory_settings(use_empty=True)
     M = materials()
@@ -186,6 +211,7 @@ def build():
     build_ceiling(M)
     build_window(M)
     build_door(M)
+    build_racks()
     build_outside(M)
 
     empty("spawn_A", (sum(DOOR_X) / 2, -D / 2 + 2.8, 0))  # перед дверью, чтобы камере за спиной хватало места

@@ -41,6 +41,8 @@ MODELS = {
     "ostanovka": ("avtobusnaya_ostanovka.glb", "avtobusnaya_ostanovka.glb", 2.9, 0.03),
     # Монтёр без каски с отвёрткой в руках, лицом к +X — работает в корзине автовышки (build_evening.py)
     "monter_otvertka": ("monter_s_otvertkoi.glb", "monter_otvertka.glb", 1.8, 0.04),
+    # Серверная стойка 42U с оборудованием и кабелями, фасадом к −Y; высота 2 м (серверная, build_server.py)
+    "server": ("servera.glb", "server_rack.glb", 2.0, 0.05, True),
 }
 
 
