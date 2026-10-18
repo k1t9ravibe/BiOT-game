@@ -14,7 +14,7 @@ import { WalkEngine, type WalkOptions } from '../walk/engine'
 import type { Task, TaskResult } from '../types'
 
 /**
- * Режим ходьбы (/walk, город — /city, вечерний город — /evening, серверная — /server): 3D-сцена из Blender, игрок идёт от точки A к точке B,
+ * Режим ходьбы (/walk, город — /city, вечерний город — /evening, серверная — /server, трасса — /highway): 3D-сцена из Blender, игрок идёт от точки A к точке B,
  * по пути осматривает объекты и отмечает нарушения. Карточки и баллы — в формате tasks.json.
  * Объекты сцены с именем item_<id> соответствуют карточкам задания с тем же id.
  */
@@ -68,12 +68,21 @@ export const SCENES: Record<string, SceneConfig> = {
     route: 'Пройдите от двери (A) к окну (B).',
     options: { fog: [40, 200], far: 400, sky: ROOM_SKY, room: { ceiling: 3.6, wallGap: 0.25, camDist: 5 }, ambient: serverAmbient },
   },
+  // Локация 5 — трасса: упавшая опора ВЛ 10 кВ, провода на дороге (в работе, карточки — черновик)
+  highway: {
+    number: 5,
+    tasksUrl: '/walk-tasks.json',
+    taskId: 'highway',
+    title: 'Упавшая опора у трассы',
+    route: 'Пройдите по обочине от точки A до точки B.',
+    options: { fog: [60, 280], far: 700, sunFollow: true },
+  },
   t1: { tasksUrl: config.tasksUrl, taskId: 't1', title: 'Опора у сельской АТС', route: 'Дойдите от фургона (A) до опоры (B).' },
 }
 /** По умолчанию ландшафт; другую сцену можно выбрать параметром: /walk?scene=t1 → /models/t1.glb */
 const PARAMS = new URLSearchParams(location.search)
-/** Сцены с собственным адресом: /city (#city), /evening (#evening), /server (#server) */
-const ROUTED = ['city', 'evening', 'server'].find((s) => location.pathname.replace(/\/$/, '') === `/${s}` || location.hash === `#${s}`)
+/** Сцены с собственным адресом: /city (#city), /evening (#evening), /server (#server), /highway (#highway) */
+const ROUTED = ['city', 'evening', 'server', 'highway'].find((s) => location.pathname.replace(/\/$/, '') === `/${s}` || location.hash === `#${s}`)
 const SCENE_NAME = ROUTED ?? (PARAMS.get('scene')?.replace(/[^\w-]/g, '') || 'landscape')
 const WORKER_URL = '/models/worker.glb'
 /** На каком расстоянии от B можно завершить осмотр */
