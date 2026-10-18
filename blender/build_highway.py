@@ -23,12 +23,14 @@ from mathutils import Vector as V
 
 sys.path.insert(0, os.path.dirname(__file__))
 import build_city as city  # noqa: E402
-from lowpoly import M, MB, empty, mat  # noqa: E402
+from lowpoly import M, MB, empty, mat, principled  # noqa: E402
 
 ROOT = city.ROOT
 OUT_GLB = os.path.join(ROOT, "public", "models", "highway.glb")
 OUT_BLEND = os.path.join(ROOT, "blender", "highway_base.blend")
 VAN_GLB = os.path.join(ROOT, "blender", "assets", "furgonkt_van.glb")  # фургон Казахтелекома из локации 1
+ZEMLYA_GLB = os.path.join(ROOT, "blender", "assets", "zemlya_trava.glb")  # плитка газона (prep_zemlya.py)
+TRAVA_TOP = os.path.join(ROOT, "blender", "assets", "trava_top.jpg")      # та же плитка сверху — дальняя земля
 
 X0, X1 = -260, 300           # трасса по X
 ROAD = 3.6                   # полуширина проезжей части
@@ -43,6 +45,12 @@ WIRE_R = 0.02
 FALLEN_X = 40                # эта опора упала
 FALLEN_TOP = V((35.0, -1.6, 0.12))  # куда лёг её верх — на ближнюю полосу трассы
 
+# Плитки газона 6 × 6,42 м — вдоль маршрута игрока по обе стороны трассы; дальше — плоская земля с текстурой
+# той же плитки (повтор каждые TILE_TOP м). Шаг чуть меньше плитки — края плиток неровные, щелей не остаётся
+TILE_STEP = (5.85, 6.25)
+TILE_X = (-66, 84)
+TILE_ROWS = [-1, -2, -3, 1, 2]    # ряды от края обочины: −Y — сторона линии, +Y — за встречной полосой
+TILE_TOP = 6.0 * 0.8
 VAN_POS = (-22.0, -4.5)       # фургон мастера на обочине перед точкой A, мордой по ходу движения (+X)
 
 random.seed(5)
@@ -51,17 +59,59 @@ random.seed(5)
 def materials():
     city.city_materials()
     M["gravel"] = mat("Обочина", "#9A9284", rough=1.0)
-    M["field"] = mat("Поле", "#7FA64F", rough=0.95)
     M["pole"] = mat("Бетон опоры", "#A9A6A0", rough=0.9)
     M["porcelain"] = mat("Изолятор", "#E9EEF2", rough=0.25)
     M["wire"] = mat("Провод", "#3F4246", rough=0.45, metal=0.7)
     M["post"] = mat("Столбик", "#F2F2F0", rough=0.6)
 
 
+def build_ground():
+    """Дальняя земля — один большой прямоугольник с текстурой газона, повторённой каждые TILE_TOP м"""
+    m = bpy.data.materials.new("Газон")
+    m.use_nodes = True
+    b = principled(m.node_tree)
+    tex = m.node_tree.nodes.new("ShaderNodeTexImage")
+    tex.image = bpy.data.images.load(TRAVA_TOP)
+    m.node_tree.links.new(tex.outputs["Color"], b.inputs["Base Color"])
+    b.inputs["Roughness"].default_value = 0.95
+    x0, x1, y0, y1 = X0 - 300, X1 + 300, -400, 400
+    me = bpy.data.meshes.new("ground")
+    me.from_pydata([(x0, y0, -0.01), (x1, y0, -0.01), (x1, y1, -0.01), (x0, y1, -0.01)], [], [(0, 1, 2, 3)])
+    uv = me.uv_layers.new()
+    for loop, (x, y) in zip(uv.data, ((x0, y0), (x1, y0), (x1, y1), (x0, y1))):
+        loop.uv = (x / TILE_TOP, y / TILE_TOP)
+    me.materials.append(m)
+    bpy.context.collection.objects.link(bpy.data.objects.new("ground", me))
+
+    # Плитки — копии одной модели (меш и текстуры общие), повёрнуты на 0/90/180/270°, чтобы не было рисунка
+    first = None
+    n = 0
+    for row in TILE_ROWS:
+        s = 1 if row > 0 else -1
+        y = s * (SHOULDER - 0.1 + (abs(row) - 0.5) * TILE_STEP[1])
+        x = TILE_X[0]
+        while x <= TILE_X[1]:
+            name, rz = f"zemlya_{n}", random.choice((0, 1, 2, 3)) * math.pi / 2
+            n += 1
+            if first is None:
+                first = city.place_model(ZEMLYA_GLB, name, (x, y), rz, base_z=0, solid=False)
+                root0 = first[0].parent
+                root0.location.z = 0  # поверхность газона на нуле, грунт ниже
+            else:
+                r = root0.copy()
+                r.name = name
+                r.location = (x, y, 0)
+                r.rotation_euler.z = rz
+                bpy.context.collection.objects.link(r)
+                for o in first:
+                    c = o.copy()
+                    c.parent = r
+                    bpy.context.collection.objects.link(c)
+            x += TILE_STEP[0]
+    print("плиток газона:", n)
+
+
 def build_road():
-    g = MB("ground")
-    g.span(X0 - 300, -400, -0.05, X1 + 300, 400, -0.01, M["field"])
-    g.build()
     r = MB("road")
     r.span(X0, -ROAD, 0.0, X1, ROAD, 0.03, M["asphalt"])
     for s in (-1, 1):
@@ -186,6 +236,7 @@ def build_trees():
 def build():
     bpy.ops.wm.read_factory_settings(use_empty=True)
     materials()
+    build_ground()
     build_road()
     build_line()
     build_fallen()
