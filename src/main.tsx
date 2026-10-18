@@ -14,6 +14,8 @@ const isWalk = /^\/walk\/?$/.test(location.pathname) || location.hash === '#walk
 const isCity = /^\/city\/?$/.test(location.pathname) || location.hash === '#city'
 // Локация 3 «Вечерний город»: /evening (или #evening)
 const isEvening = /^\/evening\/?$/.test(location.pathname) || location.hash === '#evening'
+// Локация 4 «Серверная»: /server (или #server)
+const isServer = /^\/server\/?$/.test(location.pathname) || location.hash === '#server'
 // Экзамен: вход → теория → сцены симулятора по очереди → сводка: /exam (или #exam)
 const ExamScreen = lazy(() => import('./screens/ExamScreen'))
 const isExam = /^\/exam\/?$/.test(location.pathname) || location.hash === '#exam'
@@ -24,7 +26,7 @@ createRoot(document.getElementById('root')!).render(
       <Suspense fallback={null}>
         <ExamScreen />
       </Suspense>
-    ) : isEditor || isWalk || isCity || isEvening ? (
+    ) : isEditor || isWalk || isCity || isEvening || isServer ? (
       <Suspense fallback={null}>{isEditor ? <EditorScreen /> : <Walk3DScreen />}</Suspense>
     ) : (
       <App />
