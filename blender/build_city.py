@@ -1,7 +1,7 @@
 """
 Локация 2 «Город»: улица днём для режима ходьбы от третьего лица (как сцена 1).
-Игрок идёт по тротуару от точки A к открытому колодцу (B): один монтёр спускается, второй у края
-с газоанализатором. Здания-организации — фон, их оживляет src/city/ambient.ts.
+Игрок идёт по тротуару от точки A к открытому колодцу на ближней полосе дороги (B): один монтёр
+сидит в люке, второй у ограждения с газоанализатором. Здания-организации — фон, их оживляет src/city/ambient.ts.
 
 Запуск (из корня проекта):
     "C:\\Program Files\\Blender Foundation\\Blender 4.5\\blender.exe" --background --python blender/build_city.py
@@ -34,13 +34,13 @@ import bpy
 from mathutils import Vector as V
 
 sys.path.insert(0, os.path.dirname(__file__))
-from lowpoly import (M, MB, base_materials, bend_leg, empty, gable, mat, picket_fence, place_model,  # noqa: E402
-                     principled, raise_arm, rad, recolor, srgb, tree, window)
+from lowpoly import (M, MB, base_materials, empty, gable, mat, picket_fence, place_model,  # noqa: E402
+                     principled, rad, srgb, tree, window)
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 OUT_GLB = os.path.join(ROOT, "public", "models", "city.glb")
 OUT_BLEND = os.path.join(ROOT, "blender", "city_base.blend")
-WORKER_GLB = os.path.join(ROOT, "blender", "assets", "kazakhtelecom_worker_rounded_realistic.glb")
+KOLODEC_GLB = os.path.join(ROOT, "blender", "assets", "dva_montera_kolodec.glb")
 
 random.seed(11)
 
@@ -50,8 +50,10 @@ WALK_NEAR = (-7.0, -3.0)   # ближний тротуар
 WALK_FAR = (5.0, 8.6)      # дальний тротуар
 LANE_NEAR, LANE_FAR = -1.0, 3.0   # оси полос: ближняя едет по +X, дальняя по −X
 TEMPLATES_X = -400         # образцы машин и пешеходов стоят далеко за кадром
-MANHOLE = (58.0, -11.6)    # открытый колодец на газоне; с севера между ограждением и изгородью остаётся проход
-PLACE_WORKERS = False      # монтёры у колодца пока убраны — ждём другие модели (карточки no-ppe, gas-detected)
+# Колодец с двумя монтёрами — на ближней полосе у бордюра, между фонарём (x = 56) и кадкой с деревом (x = 64).
+# Модель 3,1 × 2,8 м стоит вдоль дороги, её край — в 0,2 м от бордюра; шахта утоплена под асфальт
+KOLODEC_POS = (62.0, CURB_NEAR + 0.35 + 1.38)
+KOLODEC_SINK = 0.3
 PLACE_VEHICLES = False     # машины пока убраны: скорая, пожарная и поток на дороге (образцы car_tpl_*)
 
 
@@ -694,152 +696,14 @@ def build_backdrop():
 # ---------- Работы в колодце: место, куда идёт игрок ----------
 
 def build_manhole_work():
-    """Открытый колодец кабельной канализации на газоне у тротуара — задание «city» (public/walk-tasks.json).
-    Нарушения: монтёр без каски, спецобуви и перчаток сел на край люка и спускается без лестницы;
-    бензиновый генератор работает рядом с люком с подветренной стороны — выхлоп тянет в колодец.
-    Правильно: место огорожено, у места работ противогаз, инструмент сложен в сумку.
-    Объекты стоят по разные стороны ограждения и осматриваются с небольшого расстояния — карточки
-    появляются по очереди, пока игрок обходит место работ.
-    У монтёра с газоанализатором свойство look = "gas": по Q игра показывает его глазами прибор
-    в руках (src/city/gasAnalyzer.ts) — камера в pov_gas, взгляд на pov_gas_target"""
-    cx, cy = MANHOLE
-    c = V((cx, cy, 0))
-    F = 1.6  # полуширина ограждения вокруг люка
-    iron = mat("Чугун", "#3B3A38", rough=0.6, metal=0.4)
-    hole = mat("Проём колодца", "#0B0C0D", rough=1.0)
-    sneakers = mat("Кроссовки", "#F1F1EC", rough=0.6)
-    gloves = mat("Перчатки", "#2B2F36", rough=0.8)
-
-    # Колодец: горловина, тёмный проём, отложенная крышка; лестницы в колодце нет
-    mb = MB("manhole")
-    for k in range(16):  # кольцо из сегментов, чтобы проём остался открытым
-        a = 2 * math.pi * (k + 0.5) / 16
-        mb.box(c + V((math.cos(a) * 0.58, math.sin(a) * 0.58, 0.04)), (0.16, 0.25, 0.12), M["concrete"], rz=a)
-    mb.cyl(c + V((0, 0, -0.02)), c + V((0, 0, 0.004)), 0.52, 0.52, hole, n=20)
-    lid = c + V((-0.95, -0.95, 0))
-    mb.cyl(lid, lid + V((0, 0, 0.05)), 0.5, 0.5, iron, n=20)
-    for rz in (0.4, 0.4 + math.pi / 2):
-        mb.box(lid + V((0, 0, 0.06)), (0.82, 0.05, 0.025), iron, rz=rz)
-    mb.build()
-
-    # Лестница не установлена — лежит на траве за ограждением с северной стороны: нарушение «спуск без лестницы»
-    mb = MB("item_no-ladder")
-    lad = c + V((0.2, F + 0.75, 0))
-    steel = mat("Лестница колодца", "#9EA4AA", rough=0.4, metal=0.7)
-    for s in (-1, 1):
-        mb.box(lad + V((0, s * 0.2, 0.04)), (2.6, 0.05, 0.05), steel)
-    for k in range(8):
-        mb.box(lad + V((-1.15 + k * 0.33, 0, 0.04)), (0.04, 0.4, 0.04), steel)
-    mb.build()["inspect_range"] = 1.0
-
-    # Переносное ограждение: красно-белые щиты на стойках по периметру (сам знак — отдельный объект ниже)
-    mb = MB("site_fence")
-    sides = (((-F, -F), (F, -F)), ((F, -F), (F, F)), ((F, F), (-F, F)), ((-F, F), (-F, -F)))
-    for (ax, ay), (bx, by) in sides:
-        a, b = c + V((ax, ay, 0)), c + V((bx, by, 0))
-        for p in (a, b):
-            mb.cyl(p, p + V((0, 0, 1.1)), 0.035, 0.035, M["metal"], n=6)
-            mb.box(p + V((0, 0, 0.02)), (0.3, 0.3, 0.04), M["dark"])
-        n = 6
-        for k in range(n):  # полосы щитов чередуются
-            p, q = a.lerp(b, k / n), a.lerp(b, (k + 1) / n)
-            top, low = (M["red"], M["white"]) if k % 2 == 0 else (M["white"], M["red"])
-            mb.beam(p + V((0, 0, 0.95)), q + V((0, 0, 0.95)), 0.22, 0.04, top, side=(0, 0, 1))
-            mb.beam(p + V((0, 0, 0.45)), q + V((0, 0, 0.45)), 0.12, 0.04, low, side=(0, 0, 1))
-    mb.build(solid=True)
-
-    # Знак на ограждении со стороны подхода (у точки B) — карточка «место огорожено»: правильно
-    mb = MB("item_fence-ok")
-    mb.box(c + V((-F - 0.03, 0, 1.45)), (0.03, 0.55, 0.5), M["white"])
-    mb.box(c + V((-F - 0.05, 0, 1.45)), (0.02, 0.42, 0.37), M["red"])
-    mb.build()["inspect_range"] = 1.3
-
-    if PLACE_WORKERS:
-        # Монтёр сел на северный край люка и спускается без лестницы: ноги в колодце, без каски, в кроссовках,
-        # без перчаток; карточка видна с северной стороны ограждения
-        scale = 1.9 / 2.64  # рост как у игрока (build_worker.py)
-        rz = 0.0  # лицом к −Y, сидит на дальнем (+Y) краю горловины
-        meshes = place_model(WORKER_GLB, "item_no-ppe", (cx, cy + 0.68), rz, scale=scale, base_z=-0.55,
-                             solid=False, smooth=True, inspect=1.5,
-                             drop=("hard_hat_dome", "helmet_brim", "helmet_front_rim"))
-        for side in ("1", "-1"):
-            bend_leg(meshes, side, 70, rz)   # ноги свешены в колодец
-            raise_arm(meshes, side, 25, rz)  # руки упираются в край люка
-        recolor(meshes, ("boot",), sneakers)
-
-        # Второй монтёр за ограждением с газоанализатором: лицом к колодцу (−X), в перчатках
-        rz = -math.pi / 2
-        name = "item_gas-detected"  # карточка «прибор показывает газ» откроется только после взгляда по Q
-        gx = cx + F + 0.45
-        meshes = place_model(WORKER_GLB, name, (gx, cy), rz, scale=scale, solid=True, smooth=True, inspect=1.5)
-        h1 = raise_arm(meshes, "1", 48, rz)
-        h2 = raise_arm(meshes, "-1", 48, rz)
-        recolor(meshes, ("hand",), gloves)
-        dev = (h1 + h2) / 2 + V((-0.06, 0, 0.04))
-        analyzer = MB("gas_analyzer")
-        analyzer.box(dev, (0.12, 0.2, 0.26), M["hazard"])
-        analyzer.box(dev + V((-0.065, 0, 0.05)), (0.01, 0.14, 0.09), M["car_glass"])  # экран
-        analyzer.box(dev + V((-0.065, 0, -0.06)), (0.01, 0.12, 0.05), M["dark"])      # кнопки
-        over = c + V((F, -0.15, 1.15))  # шланг пробоотборника перекинут через ограждение в колодец
-        tip = c + V((0.35, -0.15, 0.25))
-        analyzer.beam(dev + V((0, 0, -0.13)), over, 0.02, 0.02, M["dark"])
-        analyzer.beam(over, tip, 0.02, 0.02, M["dark"])
-        analyzer.beam(tip, c + V((0.3, -0.15, -1.6)), 0.02, 0.02, M["dark"])
-        analyzer.build(parent=bpy.data.objects[name])
-        bpy.data.objects[name]["look"] = "gas"
-        empty("pov_gas", (gx - 0.08, cy, 1.74))       # глаза монтёра
-        empty("pov_gas_target", (cx + 0.3, cy, 0.3))  # смотрит на прибор и люк
-
-    # Противогаз в сумке у ограждения — правильно
-    mb = MB("item_gasmask-ok")
-    g = c + V((F + 0.75, -F - 0.2, 0))  # юго-восточный угол, рядом с монтёром с газоанализатором
-    khaki = mat("Сумка противогаза", "#6E7246", rough=0.9)
-    rubber = mat("Резина противогаза", "#4A4F57", rough=0.7)
-    mb.box(g + V((0, 0, 0.15)), (0.36, 0.18, 0.3), khaki, rz=0.3)
-    mb.blob(g + V((0.2, -0.32, 0.13)), 0.13, rubber, scale=(1, 0.8, 1.1), bump=0.02)  # маска
-    for s in (-1, 1):  # стёкла
-        mb.cyl(g + V((0.2 + s * 0.06, -0.41, 0.17)), g + V((0.2 + s * 0.06, -0.44, 0.17)), 0.04, 0.04, M["car_glass"], n=10)
-    mb.cyl(g + V((0.2, -0.4, 0.07)), g + V((0.2, -0.54, 0.03)), 0.05, 0.05, M["metal"], n=10)  # фильтр
-    mb.build(solid=True)["inspect_range"] = 1.0
-
-    # Инструмент сложен в сумку, сумка в стороне от люка — правильно
-    mb = MB("item_toolbag-ok")
-    t = c + V((-F - 0.7, F + 0.2, 0))  # северо-западный угол
-    canvas = mat("Сумка для инструмента", "#3E4C5E", rough=0.9)
-    mb.box(t + V((0, 0, 0.16)), (0.52, 0.28, 0.32), canvas, rz=0.2)
-    mb.box(t + V((0, 0, 0.33)), (0.54, 0.3, 0.03), M["dark"], rz=0.2)
-    for s in (-1, 1):
-        mb.beam(t + V((s * 0.12, 0, 0.34)), t + V((s * 0.12, 0, 0.5)), 0.03, 0.02, M["dark"])
-    mb.box(t + V((0, 0, 0.5)), (0.3, 0.04, 0.03), M["dark"], rz=0.2)
-    mb.build(solid=True)["inspect_range"] = 0.9
-
-    # Бензиновый генератор с подветренной стороны: выхлопная труба смотрит на люк — нарушение
-    # Стоит у юго-западного угла ограждения, на пути от точки B вокруг места работ
-    mb = MB("item_generator")
-    gen = c + V((-F - 0.8, -F - 1.0, 0))
-    to_hole = (c - gen).normalized()
-    frame = mat("Рама генератора", "#2B2F36", rough=0.5, metal=0.4)
-    engine = mat("Генератор", "#D9772B", rough=0.5)
-    mb.box(gen + V((0, 0, 0.32)), (0.75, 0.55, 0.5), engine)
-    mb.box(gen + V((-0.18, 0, 0.62)), (0.36, 0.42, 0.14), M["red"])  # бензобак
-    mb.cyl(gen + V((-0.18, 0, 0.69)), gen + V((-0.18, 0, 0.74)), 0.05, 0.05, M["dark"], n=8)
-    for x in (-0.4, 0.4):
-        for y in (-0.3, 0.3):
-            mb.beam(gen + V((x, y, 0.02)), gen + V((x, y, 0.62)), 0.04, 0.04, frame)
-    for y in (-0.3, 0.3):
-        mb.beam(gen + V((-0.4, y, 0.62)), gen + V((0.4, y, 0.62)), 0.04, 0.04, frame)
-    mb.box(gen + V((0.36, -0.28, 0.35)), (0.02, 0.12, 0.16), M["dark"])  # розетки
-    pipe = gen + to_hole * 0.38 + V((0, 0, 0.42))
-    mb.beam(pipe - to_hole * 0.1, pipe + to_hole * 0.2 + V((0, 0, 0.04)), 0.07, 0.07, M["metal"])  # выхлоп — на люк
-    mb.build(solid=True)["inspect_range"] = 1.1
-    cable = MB("generator_cable")  # отдельно: иначе препятствие генератора растянется до ограждения
-    cable.beam(gen + V((0.36, 0.1, 0.3)), c + V((-F, -F + 0.4, 0.02)), 0.025, 0.025, M["dark"])
-    cable.build()
-    empty("exhaust_src", pipe + to_hole * 0.25 + V((0, 0, 0.06)))
-    empty("exhaust_to", c + V((0, 0, -0.3)))  # выхлоп сносит ветром в колодец
+    """Открытый колодец кабельной канализации на ближней полосе у тротуара — одна готовая модель
+    dva_montera_kolodec.glb (prep_static.py): люк с крышкой, ограждение, знак, монтёр в люке и монтёр
+    с газоанализатором. Ограждением и знаком смотрит на тротуар (−Y)"""
+    kx = KOLODEC_POS[0]
+    place_model(KOLODEC_GLB, "wall_kolodec", KOLODEC_POS, 0, base_z=0.02 - KOLODEC_SINK, smooth=True)  # 0,02 м — асфальт
 
     empty("spawn_A", (20.0, -11.0, 0))  # на газоне: прямой путь до колодца свободен от изгороди и скамеек
-    empty("goal_B", (cx - F - 1.2, cy, 0))  # у ограждения со стороны подхода
+    empty("goal_B", (kx, CURB_NEAR - 1.1, 0))  # на тротуаре напротив колодца
     # Где может ходить игрок: ближний тротуар и газон до живой изгороди (на проезжую часть — нельзя)
     empty("walk_min", (8, -15.0, 0))
     empty("walk_max", (170, -3.4, 0))
