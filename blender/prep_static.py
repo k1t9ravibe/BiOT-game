@@ -34,6 +34,8 @@ MODELS = {
     "kolodec": ("dva_montera_u_gorodskogo kolodca.glb", "dva_montera_kolodec.glb", 2.04, 0.04),
     # Городской квартал: четыре пятиэтажки на общей подложке с газонами и дорожками; фасады смотрят на −Y
     "doma": ("gorodskie_doma_dlya_scen.glb", "gorodskie_doma.glb", 18.0, 0.04),
+    # Лестница колодца, лежит на земле, и бензиновый генератор (он выше всего — 0,6 м); панель генератора — на −Y
+    "lestnica": ("lestnica_i_dga.glb", "lestnica_dga.glb", 0.6, 0.03),
 }
 
 

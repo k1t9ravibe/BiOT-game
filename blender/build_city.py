@@ -44,6 +44,7 @@ OUT_GLB = os.path.join(ROOT, "public", "models", "city.glb")
 OUT_BLEND = os.path.join(ROOT, "blender", "city_base.blend")
 KOLODEC_GLB = os.path.join(ROOT, "blender", "assets", "dva_montera_kolodec.glb")
 DOMA_GLB = os.path.join(ROOT, "blender", "assets", "gorodskie_doma.glb")
+LESTNICA_GLB = os.path.join(ROOT, "blender", "assets", "lestnica_dga.glb")
 
 random.seed(11)
 
@@ -65,6 +66,9 @@ HATCH_CUT = 0.55      # радиус проёма в асфальте — кра
 HATCH_SQUARE = 0.95   # полуширина квадратного выреза в асфальте и земле (круг вписан в него)
 WORKER_SHIFT = (0.0, 0.38, -0.1)  # сдвиг монтёра из модели: сел на бетонное кольцо горловины, м
 SHAFT_DEPTH = 2.6     # глубина шахты
+# Лестница и бензиновый генератор (ДГА) 2,2 × 2,2 м — на ближнем тротуаре левее колодца, между фонарём (x = 56)
+# и точкой B; генератор панелью с розетками к дороге
+LESTNICA_POS = (58.6, (WALK_NEAR[0] + WALK_NEAR[1]) / 2)
 # Квартал gorodskie_doma.glb (четыре пятиэтажки на общей подложке, 60,7 × 28,3 м, высота 18 м) — все жилые дома.
 # Кварталы стоят рядами вдоль улицы, фасадами к ней; (x центра, y края подложки со стороны улицы)
 DOMA_SIZE = (60.7, 28.3)
@@ -701,6 +705,7 @@ def build_manhole_work():
     meshes = place_model(KOLODEC_GLB, "wall_kolodec", KOLODEC_POS, 0, base_z=0.02 - KOLODEC_SINK, smooth=True)  # 0,02 м — асфальт
     move_hatch_worker(meshes[0])
     build_shaft(-SHAFT_DEPTH)
+    place_model(LESTNICA_GLB, "wall_lestnica_dga", LESTNICA_POS, math.pi, base_z=0.04, smooth=True)  # 0,04 м — плитка
 
     empty("spawn_A", (20.0, -11.0, 0))  # на газоне: прямой путь до колодца свободен от изгороди и скамеек
     empty("goal_B", (kx, CURB_NEAR - 1.1, 0))  # на тротуаре напротив колодца
