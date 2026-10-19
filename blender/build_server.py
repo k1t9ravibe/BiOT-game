@@ -1,7 +1,7 @@
 """
-Локация 4 «Серверная»: помещение без окон. Пол и стены — из модели servernaya.glb: её угол (пол с решётками,
-две стены с кабельными лотками; prep_servernaya.py → servernaya_ugol.glb) стоит четырьмя зеркальными копиями,
-вместе — замкнутая комната. Посередине — холодный коридор: два длинных ряда серверных стоек (server_rack.glb —
+Локация 4 «Серверная»: помещение без окон. Стены — из модели servernaya.glb: её угол (две стены с кабельными
+лотками; prep_servernaya.py → servernaya_ugol.glb) стоит четырьмя зеркальными копиями, вместе — замкнутая комната.
+Пол — куски фальшпола с решётками pol_dlya_servernoi.glb (prep_pol.py → pol_servernoi.glb). Посередине — холодный коридор: два длинных ряда серверных стоек (server_rack.glb —
 prep_static.py) фасадами друг к другу, в торце коридора у левой стены — ещё стойки, над ним линии светильников.
 У правой стены — два монтёра за компьютерами (monter_za_compom.glb). Потолок со светильниками, металлическая дверь.
 
@@ -36,6 +36,7 @@ DESK_GLB = os.path.join(ROOT, "blender", "assets", "monter_za_compom.glb")
 TUSHIT_GLB = os.path.join(ROOT, "blender", "assets", "monter_tushit_server.glb")
 SHKAF_GLB = os.path.join(ROOT, "blender", "assets", "pozh_shkaf.glb")
 ROOM_GLB = os.path.join(ROOT, "blender", "assets", "servernaya_ugol.glb")
+POL_GLB = os.path.join(ROOT, "blender", "assets", "pol_servernoi.glb")  # кусок фальшпола (prep_pol.py)
 LOGO_PNG = os.path.join(ROOT, "logo_ktl.png")
 # Логотип и под ним надпись KAZAKHTELECOM на дальней стене (+Y): центр по x, низ надписи
 # над полом, ширина надписи; высота логотипа; зазор между ними, м
@@ -81,6 +82,10 @@ DESKS = [(x, -D / 2 + 0.05 + DESK_EDGE, 0.0) for x in (-3.6, -2.0)]
 # Потолочные светильники 1,2 × 0,3 м: две линии над коридором и по линии над проходами за рядами
 PANELS = ([(x, y) for x in np.arange(-5.4, 5.5, 1.5) for y in (-0.55, 0.55)]
           + [(x, y) for x in np.arange(-4.5, 5.0, 3.0) for y in (-3.6, 3.6)])
+# Пол — куски 3,0 × 3,6 м (столбцы решёток вдоль X, в 0,9 м от середины куска — у фасадов стоек коридора),
+# сетка с центром в середине комнаты, под стенами — с запасом
+POL_SIZE = (3.0, 3.6)
+POLS = [(i * POL_SIZE[0], j * POL_SIZE[1]) for i in range(-2, 3) for j in range(-2, 3)]
 LAMPS = [(x, 0.0) for x in (-4.5, -1.5, 1.5, 4.5)] + [(x, y) for x in (-3.0, 3.0) for y in (-3.6, 3.6)]  # точечный свет
 
 def materials():
@@ -110,6 +115,22 @@ def build_room():
                 c.parent = r
                 bpy.context.collection.objects.link(c)
         r.parent = holder
+
+
+def build_floor():
+    """Куски пола — копии одной модели (меш и текстуры общие)"""
+    first = city.place_model(POL_GLB, "pol_0", POLS[0], 0, solid=False)
+    root0 = first[0].parent
+    root0.location.z = 0  # верх плиток на нуле
+    for n, (x, y) in enumerate(POLS[1:], 1):
+        r = root0.copy()
+        r.name = f"pol_{n}"
+        r.location = (x, y, 0)
+        bpy.context.collection.objects.link(r)
+        for o in first:
+            c = o.copy()
+            c.parent = r
+            bpy.context.collection.objects.link(c)
 
 
 def build_ceiling(M):
@@ -207,6 +228,7 @@ def build():
     bpy.ops.wm.read_factory_settings(use_empty=True)
     M = materials()
     build_room()
+    build_floor()
     build_ceiling(M)
     build_sign(*sign)
     place_copies(RACK_GLB, "wall_server", RACKS)
