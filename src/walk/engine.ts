@@ -182,10 +182,20 @@ export class WalkEngine {
   private setupWorld(root: THREE.Object3D) {
     this.scene.add(root)
     root.updateMatrixWorld(true)
+    // Анизотропная фильтрация: без неё текстуры пола и стен, которые видны под углом, сильно мылятся
+    const aniso = this.renderer.capabilities.getMaxAnisotropy()
     root.traverse((o) => {
       if ((o as THREE.Mesh).isMesh) {
         o.castShadow = o.name !== 'ground' && !o.userData.no_shadow && !o.parent?.userData.no_shadow
         o.receiveShadow = true
+        for (const m of [(o as THREE.Mesh).material].flat() as THREE.MeshStandardMaterial[]) {
+          for (const t of [m.map, m.normalMap, m.roughnessMap, m.metalnessMap, m.emissiveMap]) {
+            if (t && t.anisotropy !== aniso) {
+              t.anisotropy = aniso
+              t.needsUpdate = true
+            }
+          }
+        }
       }
     })
 
