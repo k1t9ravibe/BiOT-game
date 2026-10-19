@@ -32,10 +32,17 @@ VAN_GLB = os.path.join(ROOT, "blender", "assets", "furgonkt_van.glb")  # фур�
 TRAKTOR_GLB = os.path.join(ROOT, "blender", "assets", "traktor_kabeleukladchik.glb")
 ZEMLYA_GLB = os.path.join(ROOT, "blender", "assets", "zemlya_trava.glb")  # плитка газона (prep_zemlya.py)
 TRAVA_TOP = os.path.join(ROOT, "blender", "assets", "trava_top.jpg")      # та же плитка сверху — дальняя земля
+ASFALT_GLB = os.path.join(ROOT, "blender", "assets", "asfalt.glb")        # кусок дороги с бордюрами (prep_asfalt.py)
 
 X0, X1 = -260, 300           # трасса по X
 ROAD = 3.6                   # полуширина проезжей части
 SHOULDER = 5.4               # край обочины
+# Дорога — плитки asfalt.glb подряд вдоль X: асфальт ±ROAD с белыми краевыми линиями, бордюры с травой до ±CURB;
+# за бордюром до SHOULDER — гравий. Поверхность асфальта на ROAD_Z
+ASFALT_LEN = 9.75
+ASFALT_STEP = 9.7            # чуть меньше длины плитки — без щелей
+CURB = 4.3
+ROAD_Z = 0.03
 LINE_Y = -9.5                # ось ВЛ
 POLE_XS = list(range(-200, 281, 40))
 POLE_H = 10.0
@@ -52,7 +59,7 @@ TILE_STEP = (5.85, 6.25)
 TILE_X = (-66, 84)
 TILE_ROWS = [-1, -2, -3, 1, 2]    # ряды от края обочины: −Y — сторона линии, +Y — за встречной полосой
 TILE_TOP = 6.0 * 0.8
-VAN_POS = (-22.0, -4.5)
+VAN_POS = (-22.0, -5.6)  # целиком за бордюром дороги
 # Кабелеукладчик за линией ВЛ (справа по ходу игрока), идёт вдоль трассы барабаном вперёд (+X); за ножом —
 # полоса вскопанной земли с кабелем
 TRAKTOR_POS = (-2.0, -14.5)
@@ -118,14 +125,32 @@ def build_ground():
 
 
 def build_road():
+    # Плитки дороги — копии одной модели (меш и текстуры общие); через одну развёрнуты на 180°, чтобы
+    # камешки на асфальте и трава на бордюрах не шли одинаковым рисунком
+    first = None
+    for n in range(int((X1 - X0) / ASFALT_STEP) + 1):
+        x = X0 + ASFALT_LEN / 2 + n * ASFALT_STEP
+        name, rz = f"asfalt_{n}", math.pi * (n % 2)
+        if first is None:
+            first = city.place_model(ASFALT_GLB, name, (x, 0), rz, solid=False)
+            root0 = first[0].parent
+            root0.location.z = ROAD_Z  # поверхность асфальта на ROAD_Z, грунт плитки — под землёй
+            continue
+        r = root0.copy()
+        r.name = name
+        r.location = (x, 0, ROAD_Z)
+        r.rotation_euler.z = rz
+        bpy.context.collection.objects.link(r)
+        for o in first:
+            c = o.copy()
+            c.parent = r
+            bpy.context.collection.objects.link(c)
     r = MB("road")
-    r.span(X0, -ROAD, 0.0, X1, ROAD, 0.03, M["asphalt"])
     for s in (-1, 1):
-        y0, y1 = sorted((s * ROAD, s * SHOULDER))
+        y0, y1 = sorted((s * CURB, s * SHOULDER))
         r.span(X0, y0, 0.0, X1, y1, 0.02, M["gravel"])
-        r.span(X0, s * (ROAD - 0.35) - 0.07, 0.03, X1, s * (ROAD - 0.35) + 0.07, 0.035, M["marking"])  # краевые
-    for x in range(X0, X1, 12):  # прерывистая осевая
-        r.span(x, -0.07, 0.03, x + 6, 0.07, 0.035, M["marking"])
+    for x in range(X0, X1, 12):  # прерывистая осевая — краевые линии есть на плитке
+        r.span(x, -0.07, ROAD_Z, x + 6, 0.07, ROAD_Z + 0.004, M["marking"])
     r.build()
     posts = MB("road_posts")  # сигнальные столбики по краю обочины
     for s in (-1, 1):
