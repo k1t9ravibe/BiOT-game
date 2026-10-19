@@ -1,6 +1,6 @@
 """
-Локация 4 «Серверная»: помещение без окон. Стены — из модели servernaya.glb: её угол (две стены с кабельными
-лотками; prep_servernaya.py → servernaya_ugol.glb) стоит четырьмя зеркальными копиями, вместе — замкнутая комната.
+Локация 4 «Серверная»: помещение без окон. Стены — модели stena_s_dveryi.glb (входная, с дверью, щитами
+и вентрешёткой) и stena_bez_dveri.glb (три остальные), prep_stena.py; длинные стены растянуты по длине под комнату.
 Пол — куски фальшпола с решётками pol_dlya_servernoi.glb (prep_pol.py → pol_servernoi.glb). Посередине — холодный коридор: два длинных ряда серверных стоек (server_rack.glb —
 prep_static.py) фасадами друг к другу, в торце коридора у левой стены — ещё стойки, над ним линии светильников.
 У правой стены — два монтёра за компьютерами (monter_za_compom.glb). Потолок со светильниками, металлическая дверь.
@@ -35,31 +35,31 @@ RACK_GLB = os.path.join(ROOT, "blender", "assets", "server_rack.glb")
 DESK_GLB = os.path.join(ROOT, "blender", "assets", "monter_za_compom.glb")
 TUSHIT_GLB = os.path.join(ROOT, "blender", "assets", "monter_tushit_server.glb")
 SHKAF_GLB = os.path.join(ROOT, "blender", "assets", "pozh_shkaf.glb")
-ROOM_GLB = os.path.join(ROOT, "blender", "assets", "servernaya_ugol.glb")
+STENA_GLB = os.path.join(ROOT, "blender", "assets", "stena.glb")            # стена без двери (prep_stena.py)
+STENA_DVER_GLB = os.path.join(ROOT, "blender", "assets", "stena_dver.glb")  # входная стена с дверью
 POL_GLB = os.path.join(ROOT, "blender", "assets", "pol_servernoi.glb")  # кусок фальшпола (prep_pol.py)
 LOGO_PNG = os.path.join(ROOT, "logo_ktl.png")
-# Логотип и под ним надпись KAZAKHTELECOM на дальней стене (+Y): центр по x, низ надписи
+# Логотип и под ним надпись KAZAKHTELECOM на стене +Y (на плоскости панели): центр по x, низ надписи
 # над полом, ширина надписи; высота логотипа; зазор между ними, м
-# (между пилястрами стены модели на x = 1,2 и 4,8 и ниже кабельных лотков)
 SIGN_X, SIGN_Z, SIGN_W, SIGN_LOGO_H, SIGN_GAP = 3.0, 1.3, 2.6, 0.9, 0.12
 SIGN_RES = 400  # пикселей на метр
 SHKAF_POS = (3.2, 1.0)  # x на стене −Y, высота низа над полом: шкаф и кронштейн — пустые (нарушение)
 
-# Угол из servernaya_ugol.glb: наружный угол стен в начале координат, угол занимает x ∈ [−ROOM_HALF[0], 0],
-# y ∈ [−ROOM_HALF[1], 0]; внутренние грани стен — в INNER от наружных (prep_servernaya.py)
-ROOM_HALF = (6.45, 5.85)
-INNER = (0.26, 0.18)
-W, D, H = 2 * (ROOM_HALF[0] - INNER[0]), 2 * (ROOM_HALF[1] - INNER[1]), 3.6  # внутри: 12,38 × 11,34 м
-# Двери — в стене модели на +X при y = ±DOOR_Y (из-за отражения их две); игрок входит в ту, что на −Y.
-# На той же стене при y = ±1,6 — электрощиты, выступают на 0,34 м
-DOOR_Y = 3.15
+# Стены (prep_stena.py): длина, толщина (от задней грани до самых выступающих труб), глубина плоскости панели
+# от лицевой стороны. Входная стена — на +X, без растяжения: её длина задаёт глубину комнаты D
+STENA_DVER = (10.882, 0.893)
+STENA = (11.441, 1.005)
+PANEL = 0.44
+W, D, H = 11.5, STENA_DVER[0], 4.0  # между лицевыми сторонами стен; высота — как у стен
+# Дверь в модели — на 14,3 % длины от середины; на стене +X лицом к −X это y = −DOOR_Y
+DOOR_Y = 0.143 * STENA_DVER[0]
 # Стойки 0,94 × 0,93 м, высота 2 м. Холодный коридор шириной AISLE вдоль X по оси y = 0: от левой стены
 # к двери. Ряд у двери (−Y) — фасадом к +Y, ряд у окна — фасадом к −Y, по ROW_N стоек, от торца коридора
 # до x = ROW_X0 + ROW_N·RACK_W; в торце у левой стены — END_N стоек фасадом к +X, задние стенки — в 0,3 м от стены.
 # (x центра, y центра, поворот): модель смотрит фасадом на −Y; π — фасадом на +Y, π/2 — на +X
 RACK_W, RACK_D = 0.95, 0.93
 AISLE = 2.2
-ROW_N, END_N = 10, 2
+ROW_N, END_N = 9, 2
 ROW_X0 = -W / 2 + 0.3
 ROW_Y = AISLE / 2 + RACK_D / 2
 RACKS = ([(ROW_X0 + (k + 0.5) * RACK_W, -ROW_Y, math.pi) for k in range(ROW_N)]
@@ -80,8 +80,8 @@ TUSHIT_CENTER = (_front_x - RACK_W / 2 + TUSHIT_SIZE[0] / 2, _front_y - RACK_D /
 DESK_EDGE = 0.71
 DESKS = [(x, -D / 2 + 0.05 + DESK_EDGE, 0.0) for x in (-3.6, -2.0)]
 # Потолочные светильники 1,2 × 0,3 м: две линии над коридором и по линии над проходами за рядами
-PANELS = ([(x, y) for x in np.arange(-5.4, 5.5, 1.5) for y in (-0.55, 0.55)]
-          + [(x, y) for x in np.arange(-4.5, 5.0, 3.0) for y in (-3.6, 3.6)])
+PANELS = ([(x, y) for x in np.arange(-4.5, 4.6, 1.5) for y in (-0.55, 0.55)]
+          + [(x, y) for x in (-3.0, 0.0, 3.0) for y in (-3.6, 3.6)])
 # Пол — куски 3,0 × 3,6 м (столбцы решёток вдоль X, в 0,9 м от середины куска — у фасадов стоек коридора),
 # сетка с центром в середине комнаты, под стенами — с запасом
 POL_SIZE = (3.0, 3.6)
@@ -96,25 +96,31 @@ def materials():
     )
 
 
-def build_room():
-    """Четыре копии угла (меш и текстуры общие), отражённые по X и/или Y: каждая — под пустышкой room_m<n>
-    с масштабом ±1, стыкуются открытыми краями по осям x = 0 и y = 0"""
-    first = city.place_model(ROOM_GLB, "room_q0", ROOM_HALF, 0, solid=False, smooth=True)
+def build_walls():
+    """Входная стена — на +X. Стена без двери — на +Y, −Y и −X: копии одной модели (меш и текстуры общие),
+    растянутые по длине масштабом корня по X (это ось длины стены в файле). Стены ±Y закрывают и углы.
+    При повороте rz лицевая сторона модели (−Y файла) смотрит на (sin rz, −cos rz)"""
+    city.place_model(STENA_DVER_GLB, "room_wall_dver", (W / 2 + STENA_DVER[1], 0), -math.pi / 2, solid=False,
+                     smooth=True)
+    t = STENA[1]
+    span = W + t + STENA_DVER[1]
+    xc = (STENA_DVER[1] - t) / 2
+    spots = [((xc, D / 2 + t), 0.0, span), ((xc, -D / 2 - t), math.pi, span), ((-W / 2 - t, 0), math.pi / 2, D)]
+    first = city.place_model(STENA_GLB, "room_wall_0", spots[0][0], spots[0][1], solid=False, smooth=True)
     root0 = first[0].parent
-    root0.location.z = 0  # верх пола модели — на нуле, плита пола ниже
-    for n, (sx, sy) in enumerate(((1, 1), (-1, 1), (1, -1), (-1, -1))):
-        holder = empty(f"room_m{n}", (0, 0, 0))
-        holder.scale = (sx, sy, 1)
+    for n, (pos, rz, length) in enumerate(spots):
         r = root0
         if n:
             r = root0.copy()
-            r.name = f"room_q{n}"
+            r.name = f"room_wall_{n}"
             bpy.context.collection.objects.link(r)
             for o in first:
                 c = o.copy()
                 c.parent = r
                 bpy.context.collection.objects.link(c)
-        r.parent = holder
+        r.location.x, r.location.y = pos
+        r.rotation_euler.z = rz
+        r.scale.x = length / STENA[0]
 
 
 def build_floor():
@@ -135,7 +141,7 @@ def build_floor():
 
 def build_ceiling(M):
     c = MB("ceiling")
-    c.span(-ROOM_HALF[0], -ROOM_HALF[1], H, ROOM_HALF[0], ROOM_HALF[1], H + 0.1, M["ceiling"])
+    c.span(-W / 2 - 1.2, -D / 2 - 1.2, H, W / 2 + 1.2, D / 2 + 1.2, H + 0.1, M["ceiling"])
     c.build()
     lamps = MB("ceiling_lamps")
     for x, y in PANELS:
@@ -211,7 +217,7 @@ def build_sign(px, height):
     m.surface_render_method = "BLENDED"
     x0, x1 = SIGN_X - SIGN_W / 2, SIGN_X + SIGN_W / 2
     z0, z1 = SIGN_Z, SIGN_Z + height
-    y = D / 2 - 0.006
+    y = D / 2 + PANEL - 0.006
     me = bpy.data.meshes.new("wall_sign")
     me.from_pydata([(x0, y, z0), (x1, y, z0), (x1, y, z1), (x0, y, z1)], [], [(0, 1, 2, 3)])  # нормаль к −Y
     uv = me.uv_layers.new()
@@ -227,7 +233,7 @@ def build():
     sign = sign_pixels()
     bpy.ops.wm.read_factory_settings(use_empty=True)
     M = materials()
-    build_room()
+    build_walls()
     build_floor()
     build_ceiling(M)
     build_sign(*sign)
@@ -235,10 +241,10 @@ def build():
     place_copies(DESK_GLB, "wall_desk", DESKS)
     place_tushit()
     # Пожарный шкаф на стене −Y, фасадом в комнату (в файле фасад на −Y)
-    city.place_model(SHKAF_GLB, "wall_pozh_shkaf", (SHKAF_POS[0], -D / 2 + 0.16), math.pi, base_z=SHKAF_POS[1],
+    city.place_model(SHKAF_GLB, "wall_pozh_shkaf", (SHKAF_POS[0], -D / 2 - PANEL + 0.16), math.pi, base_z=SHKAF_POS[1],
                      smooth=True)
 
-    empty("spawn_A", (W / 2 - 1.0, -DOOR_Y, 0))  # вошёл в дверь модели; монтёр с ведром — до x 4,75, y ≥ −2,04
+    empty("spawn_A", (W / 2 - 0.9, -DOOR_Y, 0))  # вошёл в дверь; монтёр с ведром — у торца ряда, левее
     empty("goal_B", (ROW_X0 + RACK_D + 1.3, 0.0, 0))    # в конце коридора, перед стойками в торце
     m = 0.45  # от стен — радиус игрока с запасом
     empty("walk_min", (-W / 2 + m, -D / 2 + m, 0))

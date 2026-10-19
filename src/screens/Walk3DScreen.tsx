@@ -65,8 +65,8 @@ export const SCENES: Record<string, SceneConfig> = {
     tasksUrl: '/walk-tasks.json',
     taskId: 'server',
     title: 'Серверная',
-    route: 'Пройдите от двери (A) к окну (B).',
-    options: { fog: [40, 200], far: 400, sky: ROOM_SKY, room: { ceiling: 3.6, wallGap: 0.25, camDist: 5 }, ambient: serverAmbient },
+    route: 'Пройдите от двери (A) по коридору между стойками (B).',
+    options: { fog: [40, 200], far: 400, sky: ROOM_SKY, room: { ceiling: 4, wallGap: 0.25, camDist: 5 }, ambient: serverAmbient },
   },
   // Локация 5 — трасса: упавшая опора ВЛ 10 кВ, провода на дороге (в работе, карточки — черновик)
   highway: {

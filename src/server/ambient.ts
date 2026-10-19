@@ -11,11 +11,11 @@ import type { WalkSky } from '../walk/engine'
 export const ROOM_SKY: WalkSky = {
   background: '#BFDDF2',
   fog: '#CFE6F5',
-  hemi: ['#FFFFFF', '#9AA1AA', 0.9],
+  hemi: ['#FFFFFF', '#C9CED6', 2.4],
   sun: ['#FFF1D6', 2.6, [4, 9, -14]], // со стороны окна (стена +Y в Blender — −z в игре)
 }
 
-const CEILING = 3.6
+const CEILING = 4
 const SMOKE_EVERY = 0.12 // с, новый клуб из случайного источника
 const SMOKE_LIFE = 6
 const SMOKE_DARK = new THREE.Color('#3E4246') // у стойки дым тёмный, с возрастом светлеет
@@ -33,7 +33,7 @@ export function serverAmbient(root: THREE.Object3D, scene: THREE.Scene) {
   root.traverse((o) => {
     const p = o.getWorldPosition(new THREE.Vector3())
     if (o.name.startsWith('lamp_')) {
-      const l = new THREE.PointLight('#F2F6FF', 6, 9, 2)
+      const l = new THREE.PointLight('#F2F6FF', 16, 12, 1.6)
       l.position.copy(p)
       scene.add(l)
     } else if (o.name.startsWith('smoke_src_')) {
