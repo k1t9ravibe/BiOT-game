@@ -1,7 +1,8 @@
 """
-Локация 4 «Серверная»: помещение с окном и четырьмя рядами серверных стоек вдоль левой стены
-(server_rack.glb — prep_static.py); у правой стены — два монтёра за компьютерами (monter_za_compom.glb).
-Фальшпол из плиток 60 × 60 см, светлые стены, потолок со светильниками, металлическая дверь, окно
+Локация 4 «Серверная»: помещение с окном; посередине — холодный коридор: два длинных ряда серверных стоек
+(server_rack.glb — prep_static.py) фасадами друг к другу, в торце коридора у левой стены — ещё стойки, в проходе
+перфорированные плитки, над ним линии светильников. У правой стены — два монтёра за компьютерами
+(monter_za_compom.glb). Фальшпол из плиток 60 × 60 см, светлые стены, потолок со светильниками, металлическая дверь, окно
 с подоконником и радиатором. За окном двор: квартал gorodskie_doma.glb и деревья из локации 2.
 
 Запуск (из корня проекта):
@@ -50,39 +51,50 @@ WINDOW_X = (-2.0, 2.0)           # проём окна в стене +Y
 WINDOW_Z = (0.9, 2.6)
 DOOR_X = (4.5, 5.5)              # проём двери в стене −Y
 DOOR_H = 2.1
-# Стойки 0,94 × 0,93 м, высота 2 м: 4 ряда по 4 вдоль левой стены (x = −W/2), ряды идут по Y, все стойки
-# фасадом к +X — к двери и окну; первый ряд — спиной в 0,3 м от стены, между рядами проходы по 1,4 м.
-# (x центра, y центра, поворот): модель смотрит фасадом на −Y, поворот на 90° — фасадом на +X
+# Стойки 0,94 × 0,93 м, высота 2 м. Холодный коридор шириной AISLE вдоль X по оси y = 0: от левой стены
+# к двери. Ряд у двери (−Y) — фасадом к +Y, ряд у окна — фасадом к −Y, по ROW_N стоек, от торца коридора
+# до x = ROW_X0 + ROW_N·RACK_W; в торце у левой стены — END_N стоек фасадом к +X, задние стенки — в 0,3 м от стены.
+# (x центра, y центра, поворот): модель смотрит фасадом на −Y; π — фасадом на +Y, π/2 — на +X
 RACK_W, RACK_D = 0.95, 0.93
-RACK_AISLE = 1.4
-RACKS = [(-W / 2 + 0.3 + RACK_D / 2 + r * (RACK_D + RACK_AISLE), (k - 1.5) * RACK_W, math.pi / 2)
-         for r in range(4) for k in range(4)]
-# Вместо крайней стойки переднего ряда (со стороны двери) — сцена «монтёр льёт воду в стойку, из стойки дым».
+AISLE = 2.2
+ROW_N, END_N = 10, 2
+ROW_X0 = -W / 2 + 0.3
+ROW_Y = AISLE / 2 + RACK_D / 2
+RACKS = ([(ROW_X0 + (k + 0.5) * RACK_W, -ROW_Y, math.pi) for k in range(ROW_N)]
+         + [(ROW_X0 + (k + 0.5) * RACK_W, ROW_Y, 0.0) for k in range(ROW_N)]
+         + [(ROW_X0 + RACK_D / 2, (k - (END_N - 1) / 2) * RACK_W, math.pi / 2) for k in range(END_N)])
+# Вместо крайней стойки ряда у двери (на входе в коридор) — сцена «монтёр льёт воду в стойку, из стойки дым».
 # Стойка в этой модели крупнее: 1,14 м по X файла, 1,16 м по Y; центр (0,63; 0,04), фасад к −Y, как у обычных
-# стоек; монтёр — сбоку (−X файла). Поворот тот же, что у ряда: фасадом в проход, монтёр — у торца ряда.
-# Задняя стенка — на одной линии с рядом, край — вплотную к соседней стойке
+# стоек; монтёр — сбоку (−X файла). Поворот тот же, что у ряда (π): фасадом в коридор, монтёр — у торца ряда,
+# лицом к входу. Задняя стенка — на одной линии с рядом, край — вплотную к соседней стойке
 TUSHIT_RACK = (0.63, 0.04)
 TUSHIT_SIZE = (1.14, 1.16)
-TUSHIT_RZ = math.pi / 2
+TUSHIT_RZ = math.pi
 TUSHIT_SMOKE = [(0.63, -0.5, 1.75), (0.45, -0.5, 1.35), (0.63, 0.04, 2.02)]  # фасад и верх стойки, в координатах файла
-_front_x, _front_y, _ = RACKS.pop(12)  # ряд r = 3, место k = 0
-TUSHIT_CENTER = (_front_x - RACK_D / 2 + TUSHIT_SIZE[1] / 2, _front_y + RACK_W / 2 - TUSHIT_SIZE[0] / 2)
+_front_x, _front_y, _ = RACKS.pop(ROW_N - 1)  # ряд у двери, последнее место
+TUSHIT_CENTER = (_front_x - RACK_W / 2 + TUSHIT_SIZE[0] / 2, _front_y - RACK_D / 2 + TUSHIT_SIZE[1] / 2)
 # Рабочие места у правой стены (x = W/2): стол монитором к стене, монтёр спиной к комнате. В файле монитор на −Y,
 # край стола с монитором — в 0,71 м от центра модели; поворот на 90° ставит −Y модели на +X сцены (к стене)
 DESK_EDGE = 0.71
-DESKS = [(W / 2 - 0.05 - DESK_EDGE, y, math.pi / 2) for y in (-0.9, 0.9)]
-LAMPS = [(x, y) for x in (-4.2, 0.0, 4.2) for y in (-3.0, 0.0, 3.0)]  # потолочные светильники 60 × 60 см
+# — за рядом у окна, чтобы от входа коридор был виден целиком
+DESKS = [(W / 2 - 0.05 - DESK_EDGE, y, math.pi / 2) for y in (2.6, 4.0)]
+# Потолочные светильники 1,2 × 0,3 м: две линии над коридором и по линии над проходами за рядами
+PANELS = ([(x, y) for x in np.arange(-5.4, 5.5, 1.5) for y in (-0.55, 0.55)]
+          + [(x, y) for x in np.arange(-4.5, 5.0, 3.0) for y in (-3.6, 3.6)])
+LAMPS = [(x, 0.0) for x in (-4.5, -1.5, 1.5, 4.5)] + [(x, y) for x in (-3.0, 3.0) for y in (-3.6, 3.6)]  # точечный свет
+PERF_RES = 256  # пикселей на плитку в текстуре перфорированной плитки
 
 random.seed(4)
 
 
 def materials():
     return dict(
-        wall=mat("Стена", "#E4E7EA", rough=0.9),
+        wall=mat("Стена", "#EEF0F2", rough=0.9),
         skirting=mat("Плинтус", "#7D8389", rough=0.6),
         ceiling=mat("Потолок", "#F1F2F3", rough=0.95),
-        tile=mat("Плитка фальшпола", "#C9CDD1", rough=0.6),
-        tile2=mat("Плитка фальшпола тёмная", "#BEC2C7", rough=0.6),
+        tile=mat("Плитка фальшпола", "#E2E5E8", rough=0.5),
+        tile2=mat("Плитка фальшпола тёмная", "#D9DCE0", rough=0.5),
+        perf=perf_mat(),
         seam=mat("Шов фальшпола", "#4A4F55", rough=0.8),
         frame=mat("Рама ПВХ", "#F4F5F6", rough=0.4),
         sill=mat("Подоконник", "#ECEDEE", rough=0.35),
@@ -104,19 +116,60 @@ def glass_mat():
     return m
 
 
+def perf_mat():
+    """Перфорированная плитка холодного коридора: светлая, с сеткой тёмных отверстий и сплошной каймой"""
+    n = PERF_RES
+    X, Y = np.meshgrid((np.arange(n) + 0.5) / n, (np.arange(n) + 0.5) / n)
+    step = 1 / 22
+    hole = ((np.hypot((X % step) - step / 2, (Y % step) - step / 2) < step * 0.3)
+            & (abs(X - 0.5) < 0.43) & (abs(Y - 0.5) < 0.43))
+    px = np.ones((n, n, 4), np.float32)
+    px[:, :, :3] = np.where(hole[..., None], (0.22, 0.24, 0.26), (0.86, 0.88, 0.9))
+    img = bpy.data.images.new("perf_tile", n, n)
+    img.pixels.foreach_set(px.ravel())
+    img.pack()
+    m = bpy.data.materials.new("Плитка перфорированная")
+    m.use_nodes = True
+    b = principled(m.node_tree)
+    tex = m.node_tree.nodes.new("ShaderNodeTexImage")
+    tex.image = img
+    m.node_tree.links.new(tex.outputs["Color"], b.inputs["Base Color"])
+    b.inputs["Roughness"].default_value = 0.45
+    b.inputs["Metallic"].default_value = 0.3
+    return m
+
+
 def build_floor(M):
-    """Фальшпол: плитки с зазором, под ними тёмное основание — зазоры читаются как швы"""
+    """Фальшпол: плитки с зазором, под ними тёмное основание — зазоры читаются как швы. В коридоре между рядами —
+    перфорированные плитки (свой меш с UV 0..1 на каждую плитку)"""
     base = MB("floor_base")
     base.span(-W / 2, -D / 2, -0.06, W / 2, D / 2, -0.01, M["seam"])
     base.build()
     mb = MB("raised_floor")
     nx, ny = int(W / TILE + 0.5), int(D / TILE + 0.5)
+    tw, td = W / nx, D / ny
+    verts, faces = [], []
     for i in range(nx):
         for j in range(ny):
-            x0, y0 = -W / 2 + i * W / nx, -D / 2 + j * D / ny
+            x0, y0 = -W / 2 + i * tw + 0.006, -D / 2 + j * td + 0.006
+            x1, y1 = x0 + tw - 0.012, y0 + td - 0.012
+            if abs((y0 + y1) / 2) < AISLE / 2 - 0.4 and x0 > ROW_X0 + RACK_D:
+                k = len(verts)
+                verts += [(x0, y0, 0.0), (x1, y0, 0.0), (x1, y1, 0.0), (x0, y1, 0.0)]
+                faces.append((k, k + 1, k + 2, k + 3))
+                mb.span(x0, y0, -0.03, x1, y1, -0.002, M["tile"])  # тело плитки под перфорированной гранью
+                continue
             m = M["tile"] if (i + j) % 2 else M["tile2"]
-            mb.span(x0 + 0.006, y0 + 0.006, -0.03, x0 + W / nx - 0.006, y0 + D / ny - 0.006, 0.0, m)
+            mb.span(x0, y0, -0.03, x1, y1, 0.0, m)
     mb.build()
+    me = bpy.data.meshes.new("aisle_perf")
+    me.from_pydata(verts, [], faces)
+    uv = me.uv_layers.new()
+    for n, loop in enumerate(uv.data):
+        loop.uv = ((0, 0), (1, 0), (1, 1), (0, 1))[n % 4]
+    me.materials.append(M["perf"])
+    o = bpy.data.objects.new("aisle_perf", me)
+    bpy.context.collection.objects.link(o)
 
 
 def wall_with_opening(mb, axis_y, x_open, z_open, m):
@@ -156,11 +209,12 @@ def build_ceiling(M):
     c.span(-W / 2 - WALL, -D / 2 - WALL, H, W / 2 + WALL, D / 2 + WALL, H + 0.1, M["ceiling"])
     c.build()
     lamps = MB("ceiling_lamps")
-    for n, (x, y) in enumerate(LAMPS):
-        lamps.span(x - 0.31, y - 0.31, H - 0.03, x + 0.31, y + 0.31, H, M["lamp_rim"])
-        lamps.span(x - 0.28, y - 0.28, H - 0.035, x + 0.28, y + 0.28, H - 0.03, M["lamp"])
-        empty(f"lamp_{n}", (x, y, H - 0.15))
+    for x, y in PANELS:
+        lamps.span(x - 0.63, y - 0.18, H - 0.03, x + 0.63, y + 0.18, H, M["lamp_rim"])
+        lamps.span(x - 0.6, y - 0.15, H - 0.035, x + 0.6, y + 0.15, H - 0.03, M["lamp"])
     lamps.build()
+    for n, (x, y) in enumerate(LAMPS):
+        empty(f"lamp_{n}", (x, y, H - 0.15))
 
 
 def build_window(M):
@@ -316,8 +370,8 @@ def build():
                      smooth=True)
     build_outside(M)
 
-    empty("spawn_A", (sum(DOOR_X) / 2, -D / 2 + 2.8, 0))  # перед дверью, чтобы камере за спиной хватало места
-    empty("goal_B", (0.0, D / 2 - 0.9, 0))    # у окна
+    empty("spawn_A", (DOOR_X[1], -0.4, 0))  # вошёл в дверь и повернул к коридору; монтёр с ведром — до x 4,75
+    empty("goal_B", (ROW_X0 + RACK_D + 1.3, 0.0, 0))    # в конце коридора, перед стойками в торце
     m = 0.45  # от стен — радиус игрока с запасом
     empty("walk_min", (-W / 2 + m, -D / 2 + m, 0))
     empty("walk_max", (W / 2 - m, D / 2 - m - 0.25, 0))  # у окна мешает подоконник
