@@ -80,6 +80,14 @@ const WALK_SPEED = 3.2
 const RUN_SPEED = 5.5
 const WORLD_LIMIT = 24
 
+/** Камера: по умолчанию на CAM_RISE м выше головы при camDist по горизонтали (как раньше — высота 3,2 м);
+ *  тянуть мышью по вертикали — от PITCH_MIN (взгляд вверх почти отвесно) до PITCH_MAX (сверху) */
+const CAM_RISE = 1.9
+const PITCH_DEFAULT = Math.atan2(CAM_RISE, 6.5)
+const PITCH_LOW = -0.12
+const PITCH_MIN = -1.45
+const PITCH_MAX = 1.1
+
 export class WalkEngine {
   private renderer: THREE.WebGLRenderer
   private scene = new THREE.Scene()
@@ -99,6 +107,8 @@ export class WalkEngine {
   private keys = new Set<string>()
   private stick = { x: 0, y: 0 }
   private yaw = 0
+  /** Наклон камеры, рад: 0 — на уровне головы, больше — сверху; ниже PITCH_LOW камера у земли и смотрит вверх */
+  private pitch = PITCH_DEFAULT
   private camDist = 6.5
   private phase = 0
   private paused = false
@@ -327,15 +337,20 @@ export class WalkEngine {
   // Поворот камеры перетаскиванием мыши / пальца по сцене, зум колесом
   private dragId: number | null = null
   private dragX = 0
+  private dragY = 0
   private onPointerDown = (e: PointerEvent) => {
     this.dragId = e.pointerId
     this.dragX = e.clientX
+    this.dragY = e.clientY
     this.renderer.domElement.setPointerCapture(e.pointerId)
   }
   private onPointerMove = (e: PointerEvent) => {
     if (e.pointerId !== this.dragId) return
     this.yaw -= (e.clientX - this.dragX) * 0.006
+    // мышь вверх — взгляд вверх (на вышку, опору), вниз — камера поднимается над игроком
+    this.pitch = THREE.MathUtils.clamp(this.pitch + (e.clientY - this.dragY) * 0.005, PITCH_MIN, PITCH_MAX)
     this.dragX = e.clientX
+    this.dragY = e.clientY
   }
   private onPointerUp = (e: PointerEvent) => {
     if (e.pointerId === this.dragId) this.dragId = null
@@ -518,16 +533,26 @@ export class WalkEngine {
   private updateCamera(dt: number) {
     const p = this.player.position
     const room = this.opts.room
-    const target = new THREE.Vector3(p.x + Math.sin(this.yaw) * this.camDist, p.y + 3.2, p.z + Math.cos(this.yaw) * this.camDist)
+    // Камера на сфере вокруг головы игрока; ниже PITCH_LOW она остаётся у земли, а взгляд поднимается вверх
+    const r = Math.hypot(this.camDist, CAM_RISE)
+    const orbit = Math.max(this.pitch, PITCH_LOW)
+    const lookY = p.y + (room ? 1.1 : 1.3)
+    const target = new THREE.Vector3(
+      p.x + Math.sin(this.yaw) * Math.cos(orbit) * r,
+      lookY + Math.sin(orbit) * r,
+      p.z + Math.cos(this.yaw) * Math.cos(orbit) * r,
+    )
+    target.y = Math.max(target.y, p.y + 0.4)  // при дальнем зуме не уходит под землю
+    const lift = Math.tan(Math.min(PITCH_LOW - this.pitch, 1.35)) * Math.cos(orbit) * r
     if (room) {
       // В помещении камера под потолком и внутри стен: прижимается к стене, а не уходит за неё
       const b = this.bounds
-      target.y = Math.min(p.y + 2.7, room.ceiling - 0.3)
+      target.y = Math.min(target.y, room.ceiling - 0.3)
       target.x = THREE.MathUtils.clamp(target.x, b.minX - room.wallGap, b.maxX + room.wallGap)
       target.z = THREE.MathUtils.clamp(target.z, b.minZ - room.wallGap, b.maxZ + room.wallGap)
     }
     this.camera.position.lerp(target, Math.min(1, dt * 6))
-    this.camera.lookAt(p.x, p.y + (room ? 1.1 : 1.3), p.z)
+    this.camera.lookAt(p.x, lookY + Math.max(0, lift), p.z)
   }
 
   private updateProximity() {
