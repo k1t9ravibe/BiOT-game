@@ -14,7 +14,7 @@ import { WalkEngine, type WalkOptions } from '../walk/engine'
 import type { Task, TaskResult } from '../types'
 
 /**
- * Режим ходьбы (/walk, город — /city, вечерний город — /evening, серверная — /server, трасса — /highway): 3D-сцена из Blender, игрок идёт от точки A к точке B,
+ * Режим ходьбы (/walk, город — /city, вечерний город — /evening, серверная — /server, трасса — /highway, окраина деревни — /village): 3D-сцена из Blender, игрок идёт от точки A к точке B,
  * по пути осматривает объекты и отмечает нарушения. Карточки и баллы — в формате tasks.json.
  * Объекты сцены с именем item_<id> соответствуют карточкам задания с тем же id.
  */
@@ -77,12 +77,21 @@ export const SCENES: Record<string, SceneConfig> = {
     route: 'Пройдите по обочине от точки A до точки B.',
     options: { fog: [60, 280], far: 700, sunFollow: true },
   },
+  // Локация 6 — окраина деревни: вышка сотовой связи и фургон у ворот её площадки (в работе, карточек пока нет)
+  village: {
+    number: 6,
+    tasksUrl: '/walk-tasks.json',
+    taskId: 'village',
+    title: 'Вышка связи на окраине деревни',
+    route: 'Пройдите по обочине от точки A к площадке вышки (B).',
+    options: { fog: [70, 320], far: 700, sunFollow: true },
+  },
   t1: { tasksUrl: config.tasksUrl, taskId: 't1', title: 'Опора у сельской АТС', route: 'Дойдите от фургона (A) до опоры (B).' },
 }
 /** По умолчанию ландшафт; другую сцену можно выбрать параметром: /walk?scene=t1 → /models/t1.glb */
 const PARAMS = new URLSearchParams(location.search)
-/** Сцены с собственным адресом: /city (#city), /evening (#evening), /server (#server), /highway (#highway) */
-const ROUTED = ['city', 'evening', 'server', 'highway'].find((s) => location.pathname.replace(/\/$/, '') === `/${s}` || location.hash === `#${s}`)
+/** Сцены с собственным адресом: /city (#city), /evening (#evening), /server (#server), /highway (#highway), /village (#village) */
+const ROUTED = ['city', 'evening', 'server', 'highway', 'village'].find((s) => location.pathname.replace(/\/$/, '') === `/${s}` || location.hash === `#${s}`)
 const SCENE_NAME = ROUTED ?? (PARAMS.get('scene')?.replace(/[^\w-]/g, '') || 'landscape')
 const WORKER_URL = '/models/worker.glb'
 /** На каком расстоянии от B можно завершить осмотр */

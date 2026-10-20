@@ -297,5 +297,7 @@ def build():
     bpy.ops.export_scene.gltf(filepath=OUT_GLB, export_format="GLB", export_extras=True, export_apply=True)
 
 
-build()
-print("Готово:", OUT_GLB, OUT_BLEND)
+# Окраина деревни (build_village.py) берёт отсюда дорогу и материалы — при импорте не собираем
+if __name__ == "__main__":
+    build()
+    print("Готово:", OUT_GLB, OUT_BLEND)

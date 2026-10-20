@@ -52,6 +52,9 @@ MODELS = {
     # Кабелеукладчик на гусеницах: барабан с кабелем (−Y), кабина, нож-плуг сзади (+Y); высота 3 м
     "traktor": ("traktor_dlya_kopaniya.glb", "traktor_kabeleukladchik.glb", 3.0, 0.04),
     "monter_tushit": ("monter_tushit_server.glb", "monter_tushit_server.glb", 2.0, 0.05, True),
+    # Решётчатая вышка сотовой связи (красно-белая, антенны и тарелки наверху, кабельная лестница внутри);
+    # высота 36 м, основание ~6 × 6 м (окраина деревни, build_village.py)
+    "vyshka": ("sotovaya_vyshka.glb", "sotovaya_vyshka.glb", 36.0, 0.08, True),
 }
 
 
