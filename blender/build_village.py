@@ -33,6 +33,7 @@ OUT_BLEND = os.path.join(ROOT, "blender", "village_base.blend")
 USADBA_GLB = os.path.join(ROOT, "blender", "assets", "dom_usadba.glb")       # усадьба 16 × 16,2 м (сцена 1)
 ODIN_GLB = os.path.join(ROOT, "blender", "assets", "dom_odinochny.glb")      # одиночный дом 8 × 7,2 м (сцена 1)
 VYSHKA_GLB = os.path.join(ROOT, "blender", "assets", "sotovaya_vyshka.glb")  # вышка 36 м, основание 5,7 × 6,1 м
+NIVA_GLB = os.path.join(ROOT, "blender", "assets", "niva.glb")               # «Нива» 3,74 м
 
 X0, X1 = -160, 160           # дорога по X
 SHOULDER = hw.SHOULDER       # край гравийной обочины, 5,4 м от оси
@@ -52,6 +53,7 @@ FENCE = (6.0, 6.0)           # полуразмеры ограды
 FENCE_H = 2.2
 GATE = (39.0, 45.0)          # проём ворот в ближней к дороге стороне ограды (по X)
 VAN_POS = (35.0, -11.2)      # фургон на подъезде к воротам, мордой по ходу игрока (+X)
+NIVA_POS = (28.6, -11.0)     # «Нива» за фургоном (его зад — x 32,2), тоже мордой на +X
 
 TILE_STEP = hw.TILE_STEP     # плитки газона 6 × 6,42 м с шагом чуть меньше плитки
 TILE_X = (-55, 95)           # вдоль маршрута игрока
@@ -230,6 +232,7 @@ def build_trees():
         kusty.append(("kusty_para", x + random.uniform(-3, 3), random.uniform(10, 18), -0.15, 1.0,
                       random.uniform(0, 2 * math.pi), None))
     city.clone_parts(city.DEREVYA_GLB, trees)
+    kusty = [k for k in kusty if not (abs(k[1] - NIVA_POS[0]) < 5 and abs(k[2] - NIVA_POS[1]) < 4)]  # не под «Нивой»
     city.clone_parts(city.KUSTY_GLB, kusty)
 
 
@@ -242,6 +245,7 @@ def build():
     build_compound()
     build_trees()
     city.place_model(hw.VAN_GLB, "wall_van", VAN_POS, math.pi, smooth=True)  # rz = π — мордой на +X
+    city.place_model(NIVA_GLB, "wall_niva", NIVA_POS, math.pi + 0.08, smooth=True)
 
     empty("spawn_A", (-40.0, -SHOULDER + 0.6, 0))  # на обочине в деревне, впереди — окраина и вышка
     empty("goal_B", (VAN_POS[0] - 5.0, -SHOULDER - 1.0, 0))  # у подъезда к площадке, за фургоном
