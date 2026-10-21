@@ -20,7 +20,8 @@ ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 
 # имя: (исходник в корне проекта, результат в blender/assets, размер в метрах, доля треугольников[, HD]);
 # размер — высота модели, или ("width", w) — ширина по X; HD — текстуры вдвое крупнее обычного (для моделей,
-# к которым игрок подходит близко и на которых видна размытость)
+# к которым игрок подходит близко и на которых видна размытость); вместо True можно дать число — во сколько раз
+# крупнее обычного оставить текстуры (0.5 — вдвое мельче, для моделей, которые видны только издали)
 MODELS = {
     # Сумка монтёра с инструментом и огнетушитель; выше всего — огнетушитель с рукояткой
     "sumka": ("sumka_montera_ognetushitel.glb", "sumka_ognetushitel.glb", 0.55, 0.08),
@@ -63,6 +64,13 @@ MODELS = {
     "aul2": ("aul_dom2.glb", "aul_dom2.glb", 4.5, 0.04),
     # Сельский магазин DUKEN: одноэтажный, вывеска над козырьком и дверь — на −Y; ширина 9 м по X (сцена 1, за КТПН)
     "duken": ("duken.glb", "duken.glb", ("width", 9.0), 0.04),
+    # Детская площадка: горка с башенкой (выше всего — 2,8 м), качели, карусель, песочница, лавка, низкий
+    # штакетник, вход на −Y (сцена 1, у магазина)
+    "ploshadka": ("detskaya_ploshadka.glb", "detskaya_ploshadka.glb", 2.8, 0.04),
+    # Легковые машины мордой к −X (сцена 1: парковка у магазина и обочина); длина по X
+    "vaz07": ("vaz07_car.glb", "vaz07.glb", ("width", 4.15), 0.1, 0.5),
+    "audi": ("audi_car.glb", "audi.glb", ("width", 4.48), 0.1, 0.5),
+    "vaz14": ("vaz14_car.glb", "vaz14.glb", ("width", 4.12), 0.04),
 }
 
 
@@ -74,7 +82,7 @@ def prepare(src, out, size, ratio, hd=False):
     o.data.transform(Matrix.Scale(k, 4) @ Matrix.Translation((-(lo[0] + hi[0]) / 2, -(lo[1] + hi[1]) / 2, -lo[2])))
     o.name = os.path.splitext(out)[0]
     print(src, "size, m:", ((hi - lo) * k).round(2).tolist())
-    shrink_textures(2 if hd else 1)
+    shrink_textures(2 if hd is True else hd or 1)
     export_asset(os.path.join(ROOT, "blender", "assets", out))
 
 

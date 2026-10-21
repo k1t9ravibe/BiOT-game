@@ -51,10 +51,18 @@ def vertices(o):
 
 def shrink_textures(scale=1):
     """scale — во сколько раз крупнее обычного оставить текстуры (2 — HD: цвет 4096, карты 2048)"""
+    maps = set()  # карты, названные безлико (Image_0…): узнаём по тому, что текстура не идёт в цвет
+    for m in bpy.data.materials:
+        if m.node_tree:
+            for n in m.node_tree.nodes:
+                if n.type == "TEX_IMAGE" and n.image and not any(
+                        l.to_socket.name == "Base Color" for o in n.outputs for l in o.links):
+                    maps.add(n.image.name)
     for img in bpy.data.images:
         if img.size[0] == 0:
             continue
-        side = next((s for key, s in TEX.items() if key in img.name.lower()), TEX_DEFAULT) * scale
+        key = "normal" if img.name in maps else img.name.lower()
+        side = int(next((s for k, s in TEX.items() if k in key), TEX_DEFAULT) * scale)
         if img.size[0] > side:
             img.scale(side, side)
 

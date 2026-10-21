@@ -39,6 +39,11 @@ KTPN_GLB = os.path.join(ROOT, "blender", "assets", "ktpn_monter.glb")
 SUMKA_GLB = os.path.join(ROOT, "blender", "assets", "sumka_ognetushitel.glb")
 MUZHIK_GLB = os.path.join(ROOT, "blender", "assets", "muzhik_pes_pacan.glb")
 DUKEN_GLB = os.path.join(ROOT, "blender", "assets", "duken.glb")
+PLOSHADKA_GLB = os.path.join(ROOT, "blender", "assets", "detskaya_ploshadka.glb")
+VAZ07_GLB = os.path.join(ROOT, "blender", "assets", "vaz07.glb")  # легковые мордой к −X модели
+AUDI_GLB = os.path.join(ROOT, "blender", "assets", "audi.glb")
+VAZ14_GLB = os.path.join(ROOT, "blender", "assets", "vaz14.glb")
+ASFALT_TOP = os.path.join(ROOT, "blender", "assets", "asfalt_top.jpg")  # асфальт сверху (prep_asfalt.py -- top)
 DOM_GLB = os.path.join(ROOT, "blender", "assets", "dom_usadba.glb")
 FAR_HOUSE_GLB = os.path.join(ROOT, "blender", "assets", "dom_odinochny.glb")
 ZEMLYA_GLB = os.path.join(ROOT, "blender", "assets", "zemlya_trava.glb")  # плитка газона (prep_zemlya.py)
@@ -64,9 +69,21 @@ KTPN_POS = (-13.0, -2.4)  # КТПН у дороги, левее фургона,
 KTPN_FRONT_Y = KTPN_POS[1] - 2.2
 KTPN_RIGHT_X = KTPN_POS[0] + 2.17
 KTPN_SIZE = (3.44, 2.69)
-# Магазин duken.glb (9 × 6,9 м) за КТПН, вывеской и дверью к дороге; фасад в ~3,4 м за задней стенкой КТПН
-DUKEN_POS = (-11.5, 4.95)
+# Магазин duken.glb (9 × 6,9 м) за КТПН, вывеской и дверью к дороге; фасад на y = 6 — между ним и КТПН парковка
+DUKEN_POS = (-11.5, 9.45)
 DUKEN_HALF = (4.5, 3.45)
+# Детская площадка detskaya_ploshadka.glb (8,1 × 9,6 м) правее магазина, до забора усадьбы, входом к дороге
+PLOSHADKA_POS = (-2.0, 10.8)
+PLOSHADKA_HALF = (4.05, 4.8)
+# Асфальт (x0, y0, x1, y1): парковка перед магазином от задней стенки КТПН и съезд к ней с грунтовки левее КТПН,
+# мимо посторонних; на парковке — ВАЗ-2107 мордой к магазину, на обочине левее съезда — Audi и ВАЗ-2114
+PARKING = (-23.0, KTPN_FRONT_Y + KTPN_SIZE[1] + 0.3, -6.5, DUKEN_POS[1] - DUKEN_HALF[1])
+DRIVEWAY = (-22.5, ROAD_Y + 1.6, -18.5, PARKING[1])
+ASFALT_TOP_SIZE = 5.0  # сторона asfalt_top.jpg, м
+CARS = [(VAZ07_GLB, "wall_vaz07", (-8.4, PARKING[1] + 2.8), -math.pi / 2),  # мордой к магазину
+        (AUDI_GLB, "wall_audi", (-29.0, ROAD_Y + 3.3), math.pi),               # мордой по +X вдоль дороги
+        (VAZ14_GLB, "wall_vaz14", (-35.0, ROAD_Y + 3.3), math.pi)]
+CAR_HALF = (2.3, 1.1)  # полуразмеры легковой вдоль и поперёк
 # Дальние дома у дороги (dom_odinochny.glb 8 × 7,15 м, высота 5,4 м): x, y, поворот; при rz = 0 крыльцо смотрит
 # на дорогу с севера, при π — с юга, из-за жердевого забора. Под каждым рельеф выровнен в площадку
 FAR_HOUSES = [(-44, -1.5, 0), (42, -1.5, 0), (-31, -21, math.pi), (52, -21, math.pi)]
@@ -362,6 +379,31 @@ def build_ground():
     return o
 
 
+def build_parking():
+    """Парковка у магазина и съезд к ней с грунтовки: плоский асфальт чуть над землёй, текстура asfalt_top.jpg"""
+    m = bpy.data.materials.new("Асфальт парковки")
+    m.use_nodes = True
+    b = principled(m.node_tree)
+    tex = m.node_tree.nodes.new("ShaderNodeTexImage")
+    tex.image = bpy.data.images.load(ASFALT_TOP)
+    m.node_tree.links.new(tex.outputs["Color"], b.inputs["Base Color"])
+    b.inputs["Roughness"].default_value = 0.9
+
+    mb = MB("parking")
+    pts, faces = [], []
+    for x0, y0, x1, y1 in (PARKING, DRIVEWAY):
+        k = len(pts)
+        pts += [(x, y, height(x, y) + 0.03) for x, y in ((x0, y0), (x1, y0), (x1, y1), (x0, y1))]
+        faces.append((k, k + 1, k + 2, k + 3))
+    mb.poly(pts, faces, m)
+    o = mb.build(recalc=False)
+    uv = o.data.uv_layers.new()
+    for loop, l in zip(uv.data, o.data.loops):
+        x, y, _ = pts[l.vertex_index]
+        loop.uv = (x / ASFALT_TOP_SIZE, y / ASFALT_TOP_SIZE)
+    return o
+
+
 def build_road():
     """Грунтовка вдоль X: две колеи и травяная полоса посередине"""
     mb = MB("road")
@@ -395,7 +437,14 @@ def tile_blocked(x, y):
         (KTPN_RIGHT_X - KTPN_SIZE[0] - 2.6, KTPN_FRONT_Y - 2.6, KTPN_RIGHT_X + 2.3, KTPN_FRONT_Y + KTPN_SIZE[1] + 0.3),
         (DUKEN_POS[0] - DUKEN_HALF[0] - 0.5, DUKEN_POS[1] - DUKEN_HALF[1] - 0.8,
          DUKEN_POS[0] + DUKEN_HALF[0] + 0.5, DUKEN_POS[1] + DUKEN_HALF[1] + 0.5),
+        (PLOSHADKA_POS[0] - PLOSHADKA_HALF[0], PLOSHADKA_POS[1] - PLOSHADKA_HALF[1],
+         PLOSHADKA_POS[0] + PLOSHADKA_HALF[0], PLOSHADKA_POS[1] + PLOSHADKA_HALF[1]),
+        PARKING,
+        DRIVEWAY,
     ]
+    for _, _, (cx, cy), rz in CARS:
+        ax, ay = CAR_HALF if abs(math.cos(rz)) > 0.5 else CAR_HALF[::-1]
+        zones.append((cx - ax, cy - ay, cx + ax, cy + ay))
     return any(x - hx < x1 and x + hx > x0 and y - hy < y1 and y + hy > y0 for x0, y0, x1, y1 in zones)
 
 
@@ -520,7 +569,7 @@ def tree(mb_trunk, mb_crown, kind, x, y, s=1.0):
 
 def build_trees():
     # Рядом с игроком: у каждого дерева свой ствол-препятствие, кроны общим объектом
-    near = [("birch", -16, 12), ("birch", -19, 4), ("tree", 22.5, 4), ("birch", 22, 15), ("tree", -14, -20),
+    near = [("birch", -19.5, 14), ("birch", -26, 4), ("tree", 22.5, 4), ("birch", 22, 15), ("tree", -14, -20),
             ("birch", 15, -19), ("tree", -21, 21), ("pine", 21, -21)]
     crowns = MB("tree_crowns")
     for i, (kind, x, y) in enumerate(near):
@@ -734,6 +783,7 @@ def build():
 
     build_ground()
     build_road()
+    build_parking()
     build_grass_tiles()
     build_fences()
     build_trees()
@@ -756,6 +806,9 @@ def build():
                 inspect=3.5)  # монтёр в проёме — осматривается от створок
     empty("place_worker", (-1.0, -4.0, 0))
     place_model(DUKEN_GLB, "wall_duken", DUKEN_POS, 0, fit_logos=False)  # магазин за КТПН, вывеской к дороге
+    place_model(PLOSHADKA_GLB, "wall_ploshadka", PLOSHADKA_POS, 0, fit_logos=False)  # входом к дороге
+    for path, name, pos, rz in CARS:
+        place_model(path, name, pos, rz, fit_logos=False, smooth=True)
 
     bpy.ops.wm.save_as_mainfile(filepath=OUT_BLEND)
     bpy.ops.export_scene.gltf(filepath=OUT_GLB, export_format="GLB", export_extras=True, export_apply=True)
