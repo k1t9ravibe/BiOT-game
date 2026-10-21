@@ -44,6 +44,8 @@ VAZ07_GLB = os.path.join(ROOT, "blender", "assets", "vaz07.glb")  # легков
 AUDI_GLB = os.path.join(ROOT, "blender", "assets", "audi.glb")
 VAZ14_GLB = os.path.join(ROOT, "blender", "assets", "vaz14.glb")
 ASFALT_TOP = os.path.join(ROOT, "blender", "assets", "asfalt_top.jpg")  # асфальт сверху (prep_asfalt.py -- top)
+DOROGA_GLB = os.path.join(ROOT, "blender", "assets", "selskaya_doroga.glb")  # плитка грунтовки (prep_doroga.py)
+DEREVYA_GLB = os.path.join(ROOT, "blender", "assets", "derevya.glb")  # tree_bereza, tree_topol, tree_el (prep_trees.py)
 DOM_GLB = os.path.join(ROOT, "blender", "assets", "dom_usadba.glb")
 FAR_HOUSE_GLB = os.path.join(ROOT, "blender", "assets", "dom_odinochny.glb")
 ZEMLYA_GLB = os.path.join(ROOT, "blender", "assets", "zemlya_trava.glb")  # плитка газона (prep_zemlya.py)
@@ -56,6 +58,7 @@ SIZE = 160        # сторона участка земли, м
 CELLS = 140       # клеток сетки рельефа по стороне
 FLAT = 30         # до этого расстояния от центра земля строго ровная
 ROAD_Y = -10      # ось грунтовой дороги (идёт вдоль X)
+ROAD_TILE = (12.8, 0.02)  # шаг плиток selskaya_doroga (13,04 × 6 м — чуть внахлёст) и высота полотна над землёй
 # Усадьба dom_usadba.glb (дом, сарай, колодец, грядки, забор) 16 × 16,2 м, крыльцом к дороге. Травяная подложка
 # модели толщиной ~0,27 м утоплена в землю. Передний край забора неровный, ближе всего к дороге — y ≈ 0,3
 DOM_POS = (11.0, 8.4)
@@ -78,7 +81,7 @@ PLOSHADKA_HALF = (4.05, 4.8)
 # Асфальт (x0, y0, x1, y1): парковка перед магазином от задней стенки КТПН и съезд к ней с грунтовки левее КТПН,
 # мимо посторонних; на парковке — ВАЗ-2107 мордой к магазину, на обочине левее съезда — Audi и ВАЗ-2114
 PARKING = (-23.0, KTPN_FRONT_Y + KTPN_SIZE[1] + 0.3, -6.5, DUKEN_POS[1] - DUKEN_HALF[1])
-DRIVEWAY = (-22.5, ROAD_Y + 1.6, -18.5, PARKING[1])
+DRIVEWAY = (-22.5, ROAD_Y + 2.4, -18.5, PARKING[1])  # от камней по краю грунтовки
 ASFALT_TOP_SIZE = 5.0  # сторона asfalt_top.jpg, м
 CARS = [(VAZ07_GLB, "wall_vaz07", (-8.4, PARKING[1] + 2.8), -math.pi / 2),  # мордой к магазину
         (AUDI_GLB, "wall_audi", (-29.0, ROAD_Y + 3.3), math.pi),               # мордой по +X вдоль дороги
@@ -351,9 +354,6 @@ def height(x, y):
     return h
 
 
-DIRT, DIRT_DARK, DIRT_GRASS = srgb("#9C7B55"), srgb("#76593B"), srgb("#8E9550")
-
-
 def build_ground():
     """Рельеф с текстурой газона trava_top.jpg (вид сверху плитки zemlya_trava), повторённой каждые TILE_TOP м"""
     m = bpy.data.materials.new("Газон")
@@ -405,23 +405,26 @@ def build_parking():
 
 
 def build_road():
-    """Грунтовка вдоль X: две колеи и травяная полоса посередине"""
-    mb = MB("road")
-    profile = [(-2.3, DIRT_GRASS), (-1.25, DIRT), (-0.85, DIRT_DARK), (-0.45, DIRT), (0.0, DIRT_GRASS),
-               (0.45, DIRT), (0.85, DIRT_DARK), (1.25, DIRT), (2.3, DIRT_GRASS)]
-    xs = [x for x in range(-SIZE // 2, SIZE // 2 + 1)]
-    pts, cols = [], []
-    for x in xs:
-        wob = 0.4 * nz(x, 0, 6, 2.2)
-        for k, (v, c) in enumerate(profile):
-            edge = k in (0, len(profile) - 1)
-            y = ROAD_Y + v + wob + (0.35 * nz(x, v, 2.5, 6.6) if edge else 0)
-            pts.append((x, y, 0.004 if edge else 0.012))
-            cols.append(lerp(c, srgb("#6F8F40"), 0.25 + 0.3 * nz(x, v, 3, 8.8)) if c is DIRT_GRASS else c)
-    w = len(profile)
-    faces = [(r * w + k + 1, r * w + k, (r + 1) * w + k, (r + 1) * w + k + 1) for r in range(len(xs) - 1) for k in range(w - 1)]
-    mb.poly(pts, faces, M["ground"], cols)
-    return mb.build(smooth_shade=True, recalc=False)
+    """Грунтовка вдоль X — плитки selskaya_doroga.glb подряд (меш и текстуры общие), через одну развёрнуты на 180°,
+    чтобы рисунок не повторялся; полотно чуть над землёй (рельеф под дорогой ровный)"""
+    first, x, n = None, -SIZE / 2, 0
+    while x - ROAD_TILE[0] / 2 < SIZE / 2:
+        name, rz = f"road_{n}", math.pi * (n % 2)
+        if first is None:
+            first = place_model(DOROGA_GLB, name, (x, ROAD_Y), rz, solid=False, fit_logos=False)
+            root0 = first[0].parent
+            root0.location.z = ROAD_TILE[1]
+        else:
+            r = root0.copy()
+            r.name = name
+            r.location = (x, ROAD_Y, ROAD_TILE[1])
+            r.rotation_euler.z = rz
+            bpy.context.collection.objects.link(r)
+            for o in first:
+                c = o.copy()
+                c.parent = r
+                bpy.context.collection.objects.link(c)
+        x, n = x + ROAD_TILE[0], n + 1
 
 
 # ---------- Газон: плитки zemlya_trava ----------
@@ -536,50 +539,22 @@ def build_fences():
 
 # ---------- Деревья ----------
 
-def tree(mb_trunk, mb_crown, kind, x, y, s=1.0):
-    z = height(x, y)
-    base = V((x, y, z - 0.2))
-    if kind == "birch":
-        top = base + V((random.uniform(-0.3, 0.3), random.uniform(-0.3, 0.3), 6.5 * s))
-        mb_trunk.cyl(base, top, 0.16 * s, 0.07 * s, M["birch"], n=7)
-        for k in range(5):
-            h = random.uniform(0.5, 3.5) * s
-            mb_trunk.box(base.lerp(top, h / (6.5 * s)) + V((0, 0, 0)), (0.3 * s, 0.3 * s, 0.05), M["birch_mark"], rz=random.uniform(0, 3))
-        for k in range(3):
-            mb_crown.blob(base.lerp(top, 0.62 + 0.13 * k) + V((random.uniform(-0.5, 0.5), random.uniform(-0.5, 0.5), 0)),
-                          1.5 * s, M["leaf_light"], scale=(1, 1, 1.35), bump=0.2)
-    elif kind == "pine":
-        mb_trunk.cyl(base, base + V((0, 0, 3 * s)), 0.2 * s, 0.12 * s, M["bark"], n=6)
-        for k in range(3):
-            r = (2.0 - k * 0.5) * s
-            mb_crown.cyl(base + V((0, 0, (1.6 + k * 1.6) * s)), base + V((0, 0, (4.2 + k * 1.6) * s)), r, 0, M["pine"], n=8)
-    else:  # лиственное дерево; apple — яблоня во дворе
-        h = (3.0 if kind == "apple" else 4.0) * s
-        mb_trunk.cyl(base, base + V((0, 0, h)), 0.2 * s, 0.13 * s, M["bark"], n=7)
-        r = (1.5 if kind == "apple" else 2.0) * s
-        for k in range(4):
-            off = V((random.uniform(-0.8, 0.8), random.uniform(-0.8, 0.8), random.uniform(0, 1.0))) * s
-            mb_crown.blob(base + V((0, 0, h)) + off, r * random.uniform(0.75, 1.0), M["leaf"], scale=(1, 1, 0.85), bump=0.2)
-        if kind == "apple":
-            for k in range(14):
-                a = random.uniform(0, 2 * math.pi)
-                p = base + V((math.cos(a) * r * 1.05, math.sin(a) * r * 1.05, h + random.uniform(-0.3, 0.6)))
-                mb_crown.blob(p, 0.09, M["apple"], seg=5, rings=3, bump=0)
+TREE_KINDS = {"birch": "tree_bereza", "tree": "tree_topol", "pine": "tree_el"}
 
 
 def build_trees():
-    # Рядом с игроком: у каждого дерева свой ствол-препятствие, кроны общим объектом
+    """Деревья — наши derevya.glb (берёза, тополь, ель; меш и текстуры общие), каждое со случайным поворотом.
+    У ближних к игроку — ещё ствол-препятствие wall_trunk_* внутри ствола модели"""
     near = [("birch", -19.5, 14), ("birch", -26, 4), ("tree", 22.5, 4), ("birch", 22, 15), ("tree", -14, -20),
             ("birch", 15, -19), ("tree", -21, 21), ("pine", 21, -21)]
-    crowns = MB("tree_crowns")
+    spots = []
     for i, (kind, x, y) in enumerate(near):
+        spots.append((kind, x, y, random.uniform(0.9, 1.15)))
         trunk = MB(f"wall_trunk_{i}")
-        tree(trunk, crowns, kind, x, y, random.uniform(0.9, 1.15))
+        trunk.cyl(V((x, y, height(x, y) - 0.2)), V((x, y, height(x, y) + 2.0)), 0.12, 0.1, M["bark"], n=6)
         trunk.build()
-    crowns.build()
 
-    # Дальние деревья на холмах — один объект
-    far_t, far_c = MB("trees_far_trunks"), MB("trees_far_crowns")
+    # Дальние деревья на холмах
     placed = 0
     while placed < 70:
         a = random.uniform(0, 2 * math.pi)
@@ -587,11 +562,25 @@ def build_trees():
         x, y = math.cos(a) * r, math.sin(a) * r
         if abs(y - ROAD_Y) < 6 or max(abs(x), abs(y)) < 27 or any(pad_distance(x, y, h) < 1 for h in FAR_HOUSES):
             continue
-        kind = random.choice(["pine", "pine", "birch", "tree"])
-        tree(far_t, far_c, kind, x, y, random.uniform(0.9, 1.4))
+        spots.append((random.choice(["pine", "pine", "birch", "tree"]), x, y, random.uniform(0.9, 1.4)))
         placed += 1
-    far_t.build()
-    far_c.build()
+
+    before = set(bpy.data.objects)
+    bpy.ops.import_scene.gltf(filepath=DEREVYA_GLB)
+    tpl = {o.name.split(".")[0]: o for o in set(bpy.data.objects) - before if o.type == "MESH"}
+    # Модели сохранены с осью Z вверх, импорт поворачивает их как glTF с осью Y — возвращаем, как в place_model;
+    # начало координат каждого дерева — у основания ствола
+    fix = Matrix.Rotation(rad(-90), 4, "X")
+    local = {k: Matrix.Translation(-o.matrix_world.translation) @ o.matrix_world for k, o in tpl.items()}
+    for i, (kind, x, y, sc) in enumerate(spots):
+        k = TREE_KINDS[kind]
+        o = tpl[k].copy()
+        o.name = f"{k}_{i}"
+        bpy.context.collection.objects.link(o)
+        o.matrix_world = (Matrix.Translation((x, y, height(x, y) - 0.1)) @ Matrix.Rotation(random.uniform(0, 2 * math.pi), 4, "Z")
+                          @ Matrix.Scale(sc, 4) @ fix @ local[k])
+    for o in tpl.values():
+        bpy.data.objects.remove(o)
 
     # Кусты вдоль соседского забора
     bushes = MB("bushes")
