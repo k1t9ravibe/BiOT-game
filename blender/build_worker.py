@@ -1,124 +1,115 @@
 """
-Персонаж игрока из готовой модели blender/assets/kazakhtelecom_worker_rounded_realistic.glb.
+Персонаж игрока из модели пользователя monter_walk.glb (корень проекта): монтёр Казахтелекома в каске,
+со скелетом и анимациями шага и бега.
 
 Запуск (из корня проекта):
     "C:\\Program Files\\Blender Foundation\\Blender 4.5\\blender.exe" --background --python blender/build_worker.py
 
 Результат:
-    public/models/worker.glb — персонаж для режима ходьбы (/walk)
+    public/models/worker.glb — персонаж для режима ходьбы (/walk и остальные сцены)
 
-Исходный файл сохранён с осью Z вверх, ростом 2,7 м и без узлов для анимации. Здесь он ставится вертикально,
-приводится к росту прежнего монтёра (1,9 м), а рукава с кистями и брюки с ботинками собираются под узлы
-arm_L / arm_R / leg_L / leg_R — их качает движок при ходьбе (src/walk/engine.ts).
-Персонаж смотрит по +Z игры (в исходнике — по −Y), поэтому его левая сторона — +X: это суффикс _L.
+В исходнике рядом с монтёром лежит лишняя икосфера — она удаляется. Из анимаций остаются Walking и Running
+(обе на месте, без хода корня); walking_2 уводит корень вперёд, а walking_2_inplace дублирует шаг — убираются.
+Движок проигрывает Walking/Running через AnimationMixer, а в покое плавно возвращает позу покоя (src/walk/engine.ts).
+Персонаж смотрит по −Y (в игре — по +Z), левая рука — на +X, как у прежнего монтёра.
 """
 
 import math
 import os
+import sys
 
+import bmesh
 import bpy
 from mathutils import Matrix
 from mathutils import Vector as V
 
+sys.path.insert(0, os.path.dirname(__file__))
+from prep_model import shrink_textures  # noqa: E402
+
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-SRC = os.path.join(ROOT, "blender", "assets", "kazakhtelecom_worker_rounded_realistic.glb")
+SRC = os.path.join(ROOT, "monter_walk.glb")
 OUT = os.path.join(ROOT, "public", "models", "worker.glb")
 
-HEIGHT = 1.9  # рост от подошвы до верха каски, м
-ARM_PARTS = ("upper_sleeve", "lower_sleeve", "hand")  # плечевая накладка остаётся на корпусе
-LEG_PARTS = ("trouser", "boot")
+HEIGHT = 1.85  # рост от подошвы до верха каски, м
+RATIO = 0.35  # доля треугольников после упрощения (в исходнике 165 тыс.)
+KEEP = ("Walking", "Running")
 
 
-def bbox(objs):
-    pts = [o.matrix_world @ v.co for o in objs for v in o.data.vertices]
+def mesh_bbox(o):
+    pts = [o.matrix_world @ v.co for v in o.data.vertices]
     return V([min(p[i] for p in pts) for i in range(3)]), V([max(p[i] for p in pts) for i in range(3)])
 
 
-def unmirror_decal(o):
-    """Если наклейка (логотип, надпись) читается зеркально для зрителя снаружи, переворачивает её UV.
-    Наружу — от вертикальной оси персонажа (x = y = 0)"""
-    me = o.data
-    uv = me.uv_layers.active.data
-    poly = me.polygons[0]
-    loops = list(poly.loop_indices)
-    pts = [me.vertices[me.loops[i].vertex_index].co for i in loops]
-    us = [uv[i].uv.x for i in loops]
-    du = pts[us.index(max(us))] - pts[us.index(min(us))]
-    c = sum(pts, V()) / len(pts)
-    n = poly.normal.copy()
-    if n.dot(V((c.x, c.y, 0))) < 0:
-        n = -n
-    if du.dot((-n).cross(V((0, 0, 1)))) < 0:
-        for l in uv:
-            l.uv.x = 1 - l.uv.x
+def decimate(o):
+    """Как prep_model.import_decimated: склеить вершины и пометить швы развёртки, иначе упрощение
+    тянет края островков UV в тёмные щели атласа. Группы вершин (веса скелета) упрощение сохраняет"""
+    bpy.context.view_layer.objects.active = o
+    o.select_set(True)
+    bm = bmesh.new()
+    bm.from_mesh(o.data)
+    bmesh.ops.remove_doubles(bm, verts=bm.verts, dist=1e-6)
+    bm.to_mesh(o.data)
+    bm.free()
+    bpy.ops.object.mode_set(mode="EDIT")
+    bpy.ops.mesh.select_all(action="SELECT")
+    bpy.ops.uv.seams_from_islands()
+    bpy.ops.object.mode_set(mode="OBJECT")
+    m = o.modifiers.new("decimate", "DECIMATE")
+    m.ratio = RATIO
+    bpy.ops.object.modifier_move_to_index(modifier=m.name, index=0)  # до модификатора скелета
+    bpy.ops.object.modifier_apply(modifier=m.name)
+    bpy.ops.object.shade_smooth_by_angle(angle=math.radians(40))
+
+
+def stride(arm, action):
+    """Сколько метров проходит персонаж за один цикл анимации: стопа в опоре едет назад относительно корпуса,
+    за цикл два шага. Печатается для подбора скорости проигрывания в движке"""
+    arm.animation_data.action = action
+    sc = bpy.context.scene
+    f0, f1 = (int(round(f)) for f in action.frame_range)
+    ys = []
+    for f in range(f0, f1 + 1):
+        sc.frame_set(f)
+        ys.append((arm.matrix_world @ arm.pose.bones["foot.L"].head).y)
+    fps = sc.render.fps / sc.render.fps_base
+    return 2 * (max(ys) - min(ys)), (f1 - f0) / fps
 
 
 def build():
     bpy.ops.wm.read_factory_settings(use_empty=True)
     bpy.ops.import_scene.gltf(filepath=SRC)
-    meshes = [o for o in bpy.data.objects if o.type == "MESH"]
-
-    # Запекаем импортные трансформы и поворот «лёжа → стоя» прямо в вершины
-    stand = Matrix.Rotation(math.radians(-90), 4, "X")
-    done = set()
-    for o in meshes:
-        mw = stand @ o.matrix_world
-        if o.data in done:
-            o.data = o.data.copy()
-        done.add(o.data)
-        o.parent = None
-        o.data.transform(mw)
-        o.matrix_world = Matrix.Identity(4)
-    for o in [o for o in bpy.data.objects if o.type != "MESH"]:
+    for o in [o for o in bpy.data.objects if o.type not in ("ARMATURE", "MESH") or o.name.startswith("Икосфера")]:
         bpy.data.objects.remove(o)
+    for a in [a for a in bpy.data.actions if a.name not in KEEP]:
+        bpy.data.actions.remove(a)
+    arm = next(o for o in bpy.data.objects if o.type == "ARMATURE")
+    body = next(o for o in bpy.data.objects if o.type == "MESH")
+    arm.name = "worker"
 
-    # Рост как у прежнего монтёра, подошвы на земле
-    lo, hi = bbox(meshes)
-    fit = Matrix.Scale(HEIGHT / (hi.z - lo.z), 4) @ Matrix.Translation((0, 0, -lo.z))
-    for o in meshes:
-        o.data.transform(fit)
-        if "logo" in o.name.lower() and o.data.uv_layers:
-            unmirror_decal(o)
-        # Гладкое затенение с острыми рёбрами по углу: и выглядит мягче, и экспорт не дробит каждую грань
-        # на свои вершины (иначе файл раздувается в разы)
-        o.data.polygons.foreach_set("use_smooth", [True] * len(o.data.polygons))
-        o.data.set_sharp_from_angle(angle=math.radians(40))
+    # Рост — по позе покоя; масштаб остаётся на узле скелета, тогда ключи анимации менять не нужно
+    arm.animation_data.action = None
+    for pb in arm.pose.bones:
+        pb.matrix_basis = Matrix.Identity(4)
+    bpy.context.view_layer.update()
+    lo, hi = mesh_bbox(body)
+    arm.scale = (HEIGHT / (hi.z - lo.z),) * 3
+    arm.location.z -= lo.z * arm.scale.z
     bpy.context.view_layer.update()
 
-    root = bpy.data.objects.new("worker", None)
-    bpy.context.collection.objects.link(root)
+    decimate(body)
+    print("tris", sum(len(p.vertices) - 2 for p in body.data.polygons))
+    shrink_textures()
 
-    def limb(name, parts, pivot_of):
-        objs = [o for o in meshes if o.name.startswith(parts) and
-                (bbox([o])[0].x + bbox([o])[1].x > 0) == name.endswith("_L")]
-        e = bpy.data.objects.new(name, None)
-        bpy.context.collection.objects.link(e)
-        e.location = pivot_of(objs)
-        e.parent = root
-        bpy.context.view_layer.update()
-        for o in objs:
-            o.parent = e
-            o.matrix_parent_inverse = e.matrix_world.inverted()
-        return objs
+    for name in KEEP:
+        m, t = stride(arm, bpy.data.actions[name])
+        print(f"{name}: {m:.2f} m per cycle of {t:.2f} s -> {m / t:.2f} m/s")
+    arm.animation_data.action = None
+    for pb in arm.pose.bones:
+        pb.matrix_basis = Matrix.Identity(4)
 
-    def shoulder(objs):
-        lo, hi = bbox([o for o in objs if o.name.startswith("upper_sleeve")])
-        return V(((lo.x + hi.x) / 2, (lo.y + hi.y) / 2, hi.z - 0.04))
-
-    def hip(objs):
-        lo, hi = bbox([o for o in objs if o.name.startswith("trouser")])
-        return V(((lo.x + hi.x) / 2, (lo.y + hi.y) / 2, hi.z))
-
-    moved = []
-    for side in ("L", "R"):
-        moved += limb(f"arm_{side}", ARM_PARTS, shoulder)
-        moved += limb(f"leg_{side}", LEG_PARTS, hip)
-    for o in meshes:
-        if o not in moved:
-            o.parent = root
-
-    bpy.ops.export_scene.gltf(filepath=OUT, export_format="GLB", export_extras=True)
+    bpy.ops.export_scene.gltf(filepath=OUT, export_format="GLB", export_image_format="JPEG", export_jpeg_quality=85,
+                              export_animation_mode="ACTIONS", export_force_sampling=True)
+    print("saved", OUT, os.path.getsize(OUT) // 1024, "KB")
 
 
 build()
-print("Готово:", OUT)

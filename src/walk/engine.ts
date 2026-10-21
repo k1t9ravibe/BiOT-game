@@ -78,6 +78,10 @@ const INSPECT_RANGE = 2.2
 const PLAYER_RADIUS = 0.35
 const WALK_SPEED = 3.2
 const RUN_SPEED = 5.5
+/** Скорость, с которой персонаж проходит клипы шага и бега без ускорения, м/с (печатает blender/build_worker.py) */
+const CLIP_SPEED = { Walking: 1.4, Running: 2.66 }
+/** Предел ускорения клипов: быстрее ноги мелькают неестественно — пусть лучше чуть проскальзывают */
+const CLIP_MAX_RATE = { Walking: 1.8, Running: 1.6 }
 const WORLD_LIMIT = 24
 
 /** Камера: по умолчанию на CAM_RISE м выше головы при camDist по горизонтали (как раньше — высота 3,2 м);
@@ -96,7 +100,8 @@ export class WalkEngine {
   private raf = 0
   private ro: ResizeObserver
   private player = new THREE.Group()
-  private limbs: Record<string, THREE.Object3D> = {}
+  private mixer?: THREE.AnimationMixer
+  private gait: Partial<Record<keyof typeof CLIP_SPEED, THREE.AnimationAction>> = {}
   private colliders: THREE.Box3[] = []
   private items: Inspectable[] = []
   private goal = new THREE.Vector3()
@@ -110,7 +115,6 @@ export class WalkEngine {
   /** Наклон камеры, рад: 0 — на уровне головы, больше — сверху; ниже PITCH_LOW камера у земли и смотрит вверх */
   private pitch = PITCH_DEFAULT
   private camDist = 6.5
-  private phase = 0
   private paused = false
   private lastNear = ''
   private lastDist = -1
@@ -180,7 +184,7 @@ export class WalkEngine {
       const [world, worker] = await Promise.all([loader.loadAsync(sceneUrl), loader.loadAsync(workerUrl)])
       if (this.disposed) return
       this.setupWorld(world.scene)
-      this.setupPlayer(worker.scene)
+      this.setupPlayer(worker.scene, worker.animations)
       this.ambient = this.opts.ambient?.(world.scene, this.scene)
       this.cb.onReady()
       this.loop()
@@ -280,11 +284,19 @@ export class WalkEngine {
     this.yaw = heading + Math.PI
   }
 
-  private setupPlayer(model: THREE.Object3D) {
+  private setupPlayer(model: THREE.Object3D, clips: THREE.AnimationClip[]) {
     model.traverse((o) => {
-      if ((o as THREE.Mesh).isMesh) o.castShadow = true
-      if (/^(leg|arm)_[LR]$/.test(o.name)) this.limbs[o.name] = o
+      if ((o as THREE.Mesh).isMesh) {
+        o.castShadow = true
+        o.frustumCulled = false // границы скелетного меша считаются по позе покоя
+      }
     })
+    // Шаг и бег крутятся всё время, движок меняет только их вес: при нулевом весе — поза покоя
+    this.mixer = new THREE.AnimationMixer(model)
+    for (const name of Object.keys(CLIP_SPEED) as (keyof typeof CLIP_SPEED)[]) {
+      const clip = clips.find((c) => c.name === name)
+      if (clip) this.gait[name] = this.mixer.clipAction(clip).setEffectiveWeight(0).play()
+    }
     this.player.add(model)
     this.scene.add(this.player)
     this.updateCamera(1)
@@ -509,18 +521,18 @@ export class WalkEngine {
       let diff = target - this.player.rotation.y
       diff = Math.atan2(Math.sin(diff), Math.cos(diff))
       this.player.rotation.y += diff * Math.min(1, dt * 12)
-      this.phase += dt * speed * 2.4
-    } else {
-      this.phase *= 0.85
     }
 
-    // Анимация шага: ноги и руки качаются в противофазе
-    const swing = Math.sin(this.phase) * (amount > 0.05 ? 0.55 : 0)
-    const ease = (o: THREE.Object3D | undefined, v: number) => o && (o.rotation.x += (v - o.rotation.x) * Math.min(1, dt * 14))
-    ease(this.limbs.leg_L, swing)
-    ease(this.limbs.leg_R, -swing)
-    ease(this.limbs.arm_L, -swing * 0.8)
-    ease(this.limbs.arm_R, swing * 0.8)
+    // Анимация: шаг или бег (Shift) с весом по скорости, темп клипа — под скорость движения
+    const moving = amount > 0.05 ? speed : 0
+    const run = moving > WALK_SPEED * 1.05
+    for (const [name, a] of Object.entries(this.gait) as [keyof typeof CLIP_SPEED, THREE.AnimationAction][]) {
+      const on = moving > 0 && (name === 'Running') === run
+      const w = a.getEffectiveWeight()
+      a.setEffectiveWeight(w + ((on ? 1 : 0) - w) * Math.min(1, dt * 10))
+      if (on) a.timeScale = Math.min(CLIP_MAX_RATE[name], moving / CLIP_SPEED[name])
+    }
+    this.mixer?.update(dt)
   }
 
   private blocked(x: number, z: number) {
