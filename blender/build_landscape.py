@@ -1,10 +1,11 @@
 """
-Сельский ландшафт для режима ходьбы: рельеф, грунтовая дорога, трава, усадьба, заборы, деревья,
+Сельский ландшафт для режима ходьбы: рельеф, грунтовая дорога, газон, усадьба, заборы, деревья,
 ВЛ 10 кВ вдоль дороги (бетонные опоры, изоляторы, провода).
 Фургон, КТПН с монтёром, сумка с огнетушителем, посторонние и усадьба берутся готовыми из blender/assets
 (furgonkt_van.glb, ktpn_monter.glb, sumka_ognetushitel.glb, muzhik_pes_pacan.glb, dom_usadba.glb,
 dom_odinochny.glb —
-их готовят prep_furgon.py, prep_ktpn.py, prep_static.py).
+их готовят prep_furgon.py, prep_ktpn.py, prep_static.py). Газон — сгенерированная плитка zemlya_trava.glb
+с кочками травы и камнями на ровной части и её вид сверху trava_top.jpg на всём рельефе (prep_zemlya.py).
 АТС и людей сюда не ставим: их добавляют вручную в Blender, места помечены пустышками place_*.
 
 Запуск (из корня проекта):
@@ -39,6 +40,8 @@ SUMKA_GLB = os.path.join(ROOT, "blender", "assets", "sumka_ognetushitel.glb")
 MUZHIK_GLB = os.path.join(ROOT, "blender", "assets", "muzhik_pes_pacan.glb")
 DOM_GLB = os.path.join(ROOT, "blender", "assets", "dom_usadba.glb")
 FAR_HOUSE_GLB = os.path.join(ROOT, "blender", "assets", "dom_odinochny.glb")
+ZEMLYA_GLB = os.path.join(ROOT, "blender", "assets", "zemlya_trava.glb")  # плитка газона (prep_zemlya.py)
+TRAVA_TOP = os.path.join(ROOT, "blender", "assets", "trava_top.jpg")      # та же плитка сверху — текстура рельефа
 
 random.seed(7)
 rad = math.radians
@@ -65,6 +68,14 @@ KTPN_SIZE = (3.44, 2.69)
 FAR_HOUSES = [(-44, -1.5, 0), (42, -1.5, 0), (-31, -21, math.pi), (52, -21, math.pi)]
 FAR_HOUSE_HALF = (4.0, 3.6)  # полуразмеры по X и Y модели
 PAD_MARGIN, PAD_BLEND = 1.5, 4.0  # ровная кромка вокруг дома и ширина плавного перехода к склону, м
+# Плитки газона zemlya_trava.glb (6 × 6,42 м, поверхность на z = 0): шаг чуть меньше плитки — края неровные, щелей
+# не остаётся. Кладутся только на ровную часть (|x|, |y| ≤ TILE_LIMIT), чуть выше земли, чтобы не мерцали.
+# Рельеф под ними и вокруг покрыт видом плитки сверху, повторённым каждые TILE_TOP м
+TILE_HALF = (3.0, 3.21)
+TILE_STEP = (5.85, 6.25)
+TILE_LIMIT = 26.0
+TILE_Z = 0.012
+TILE_TOP = 6.0 * 0.8
 
 
 # ---------- Цвета и материалы ----------
@@ -122,7 +133,6 @@ M = {}
 def materials():
     M.update(
         ground=vcol_mat("Земля"),
-        grass=vcol_mat("Трава"),
         plaster=mat("Побелка", "#EEEAE0"),
         plinth=mat("Цоколь", "#7E8288"),
         roof=mat("Кровля", "#3F7A6A", rough=0.5, metal=0.3),
@@ -320,35 +330,32 @@ def height(x, y):
     return h
 
 
-G1, G2, G3 = srgb("#5E9F37"), srgb("#77B545"), srgb("#4A8A2C")
-DRY = srgb("#A7B25A")
 DIRT, DIRT_DARK, DIRT_GRASS = srgb("#9C7B55"), srgb("#76593B"), srgb("#8E9550")
 
 
-def grass_color(x, y, h):
-    c = lerp(G1, G2, 0.5 + 0.9 * nz(x, y, 9, 4.2))
-    c = lerp(c, G3, smooth(0.25, 0.6, nz(x, y, 4, 7.7)))
-    return lerp(c, DRY, h / 18 + 0.25 * smooth(0.3, 0.7, nz(x, y, 20, 9.3)))
-
-
 def build_ground():
+    """Рельеф с текстурой газона trava_top.jpg (вид сверху плитки zemlya_trava), повторённой каждые TILE_TOP м"""
+    m = bpy.data.materials.new("Газон")
+    m.use_nodes = True
+    b = principled(m.node_tree)
+    tex = m.node_tree.nodes.new("ShaderNodeTexImage")
+    tex.image = bpy.data.images.load(TRAVA_TOP)
+    m.node_tree.links.new(tex.outputs["Color"], b.inputs["Base Color"])
+    b.inputs["Roughness"].default_value = 0.95
+
     mb = MB("ground")
     n = CELLS + 1
     step = SIZE / CELLS
-    pts, cols = [], []
-    for j in range(n):
-        for i in range(n):
-            x, y = -SIZE / 2 + i * step, -SIZE / 2 + j * step
-            h = height(x, y)
-            c = grass_color(x, y, h)
-            # Под дорогой — грунт (сама колея — отдельный объект road)
-            road = abs(y - ROAD_Y) + 0.5 * nz(x, y, 3, 5.5)
-            c = lerp(DIRT, c, smooth(2.0, 3.4, road))
-            pts.append((x, y, h))
-            cols.append(c)
+    pts = [(x, y, height(x, y)) for y in (-SIZE / 2 + j * step for j in range(n))
+           for x in (-SIZE / 2 + i * step for i in range(n))]
     faces = [(j * n + i, j * n + i + 1, (j + 1) * n + i + 1, (j + 1) * n + i) for j in range(CELLS) for i in range(CELLS)]
-    mb.poly(pts, faces, M["ground"], cols)
-    return mb.build(smooth_shade=True, recalc=False)
+    mb.poly(pts, faces, m)
+    o = mb.build(smooth_shade=True, recalc=False)
+    uv = o.data.uv_layers.new()
+    for loop, l in zip(uv.data, o.data.loops):
+        x, y, _ = pts[l.vertex_index]
+        loop.uv = (x / TILE_TOP, y / TILE_TOP)
+    return o
 
 
 def build_road():
@@ -371,71 +378,57 @@ def build_road():
     return mb.build(smooth_shade=True, recalc=False)
 
 
-# ---------- Трава и цветы ----------
+# ---------- Газон: плитки zemlya_trava ----------
 
-def blocked_for_grass(x, y):
-    if abs(y - ROAD_Y) < 2.6:
-        return True
-    if YARD[0] < x < YARD[2] and YARD[1] < y < YARD[3]:  # усадьба — у неё своя трава
-        return True
-    if abs(x - CAR_POS[0]) < 2.9 and abs(y - CAR_POS[1]) < 1.25:  # место машины, трава не пробьёт кузов
-        return True
-    if -KTPN_SIZE[0] - 0.3 < x - KTPN_RIGHT_X < 0.3 and -0.3 < y - KTPN_FRONT_Y < KTPN_SIZE[1] + 0.3:  # КТПН
-        return True
-    if any(pad_distance(x, y, h) < 0.3 - PAD_MARGIN for h in FAR_HOUSES):  # дальние дома
-        return True
-    return False
+def tile_blocked(x, y):
+    """Плитка с центром (x, y) задевает дорогу или место, где кочки по колено пробили бы модель или спрятали
+    объект задания: усадьба (у неё своя трава), фургон, КТПН с посторонними и сумкой с огнетушителем"""
+    hx, hy = TILE_HALF
+    zones = [
+        (-SIZE, ROAD_Y - 3.0, SIZE, ROAD_Y + 3.0),  # грунтовка с обочинами
+        YARD,
+        (CAR_POS[0] - 2.9, CAR_POS[1] - 1.25, CAR_POS[0] + 2.9, CAR_POS[1] + 1.25),
+        (KTPN_RIGHT_X - KTPN_SIZE[0] - 2.6, KTPN_FRONT_Y - 2.6, KTPN_RIGHT_X + 2.3, KTPN_FRONT_Y + KTPN_SIZE[1] + 0.3),
+    ]
+    return any(x - hx < x1 and x + hx > x0 and y - hy < y1 and y + hy > y0 for x0, y0, x1, y1 in zones)
 
 
-def build_grass():
-    mb = MB("grass")
-    dark, light, tall = srgb("#3E7A26"), srgb("#8CC455"), srgb("#9DB955")
-
-    def tuft(x, y, hmin, hmax, blades, tip):
-        z = height(x, y)
-        for _ in range(blades):
-            a = random.uniform(0, math.pi)
-            w = random.uniform(0.04, 0.07)
-            h = random.uniform(hmin, hmax)
-            px, py = x + random.uniform(-0.12, 0.12), y + random.uniform(-0.12, 0.12)
-            dx, dy = math.cos(a) * w / 2, math.sin(a) * w / 2
-            lx, ly = random.uniform(-0.3, 0.3) * h, random.uniform(-0.3, 0.3) * h
-            mb.poly([(px - dx, py - dy, z), (px + dx, py + dy, z), (px + lx, py + ly, z + h)], [(0, 1, 2)],
-                    M["grass"], [dark, dark, lerp(light, tip, random.random())])
-
-    placed = 0
-    while placed < 3000:
-        x, y = random.uniform(-34, 34), random.uniform(-34, 34)
-        if blocked_for_grass(x, y):
-            continue
-        tuft(x, y, 0.15, 0.4, 4, light)
-        placed += 1
-
-    # Высокая трава вдоль обочин
-    lines = [((-30, ROAD_Y - 3.6), (30, ROAD_Y - 3.6)), ((-30, ROAD_Y + 2.9), (30, ROAD_Y + 2.9))]
-    for (ax, ay), (bx, by) in lines:
-        length = math.hypot(bx - ax, by - ay)
-        for _ in range(int(length * 4)):
-            t = random.random()
-            x = ax + (bx - ax) * t + random.uniform(-0.35, 0.35)
-            y = ay + (by - ay) * t + random.uniform(-0.35, 0.35)
-            if not blocked_for_grass(x, y) or abs(y - ROAD_Y) > 2.6:
-                tuft(x, y, 0.35, 0.8, 5, tall)
-
-    # Полевые цветы: стебель и головка
-    heads = [srgb(h) for h in ("#FFFFFF", "#F4D23C", "#B07CD8", "#F5F0C8")]
-    placed = 0
-    while placed < 260:
-        x, y = random.uniform(-30, 30), random.uniform(-30, 30)
-        if blocked_for_grass(x, y):
-            continue
-        z, h, s = height(x, y), random.uniform(0.25, 0.45), random.uniform(0.05, 0.08)
-        c = random.choice(heads)
-        mb.poly([(x - 0.01, y, z), (x + 0.01, y, z), (x, y, z + h)], [(0, 1, 2)], M["grass"], [dark, dark, dark])
-        mb.poly([(x - s, y, z + h), (x, y - s, z + h), (x + s, y, z + h), (x, y + s, z + h)], [(0, 1, 2, 3)],
-                M["grass"], [c] * 4)
-        placed += 1
-    return mb.build(recalc=False)
+def build_grass_tiles():
+    """Плитки — копии одной модели (меш и текстуры общие), повёрнуты на 0/90/180/270°, чтобы не было рисунка.
+    Ряды идут от обочин дороги в обе стороны"""
+    rows = []
+    y = ROAD_Y + 3.0 + TILE_HALF[1]
+    while y + TILE_HALF[1] <= TILE_LIMIT:
+        rows.append(y)
+        y += TILE_STEP[1]
+    y = ROAD_Y - 3.0 - TILE_HALF[1]
+    while y - TILE_HALF[1] >= -TILE_LIMIT:
+        rows.append(y)
+        y -= TILE_STEP[1]
+    rng = random.Random(11)  # свой генератор: раскладка деревьев и прочего от плиток не зависит
+    first, n = None, 0
+    for y in rows:
+        x = -TILE_LIMIT + TILE_HALF[0]
+        while x + TILE_HALF[0] <= TILE_LIMIT:
+            if not tile_blocked(x, y):
+                name, rz = f"zemlya_{n}", rng.choice((0, 1, 2, 3)) * math.pi / 2
+                n += 1
+                if first is None:
+                    first = place_model(ZEMLYA_GLB, name, (x, y), rz, solid=False, fit_logos=False)
+                    root0 = first[0].parent
+                    root0.location.z = TILE_Z  # поверхность газона чуть над землёй, грунт плитки — под ней
+                else:
+                    r = root0.copy()
+                    r.name = name
+                    r.location = (x, y, TILE_Z)
+                    r.rotation_euler.z = rz
+                    bpy.context.collection.objects.link(r)
+                    for o in first:
+                        c = o.copy()
+                        c.parent = r
+                        bpy.context.collection.objects.link(c)
+            x += TILE_STEP[0]
+    print("плиток газона:", n)
 
 
 # ---------- Заборы (каждый прямой участок — отдельный объект, чтобы коллизия была узкой) ----------
@@ -735,7 +728,7 @@ def build():
 
     build_ground()
     build_road()
-    build_grass()
+    build_grass_tiles()
     build_fences()
     build_trees()
     build_far_houses()
