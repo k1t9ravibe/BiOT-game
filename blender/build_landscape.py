@@ -2,9 +2,9 @@
 Сельский ландшафт для режима ходьбы: рельеф, грунтовая дорога, газон, усадьба, заборы, деревья,
 ВЛ 10 кВ вдоль дороги (бетонные опоры, изоляторы, провода).
 Фургон, КТПН с монтёром, сумка с огнетушителем, посторонние и усадьба берутся готовыми из blender/assets
-(furgonkt_van.glb, ktpn_monter.glb, sumka_ognetushitel.glb, muzhik_pes_pacan.glb, dom_usadba.glb,
-dom_odinochny.glb —
-их готовят prep_furgon.py, prep_ktpn.py, prep_static.py). Газон — сгенерированная плитка zemlya_trava.glb
+(furgonkt_van.glb, ktpn_monter.glb, sumka_ognetushitel.glb, muzhik_pes_pacan.glb, усадьбы aul_dom1.glb /
+aul_dom2.glb, магазин, детская площадка, машины — их готовят prep_furgon.py, prep_ktpn.py, prep_static.py),
+грунтовка — плитки selskaya_doroga.glb (prep_doroga.py). Газон — сгенерированная плитка zemlya_trava.glb
 с кочками травы и камнями на ровной части и её вид сверху trava_top.jpg на всём рельефе (prep_zemlya.py).
 АТС и людей сюда не ставим: их добавляют вручную в Blender, места помечены пустышками place_*.
 
@@ -43,11 +43,10 @@ PLOSHADKA_GLB = os.path.join(ROOT, "blender", "assets", "detskaya_ploshadka.glb"
 VAZ07_GLB = os.path.join(ROOT, "blender", "assets", "vaz07.glb")  # легковые мордой к −X модели
 AUDI_GLB = os.path.join(ROOT, "blender", "assets", "audi.glb")
 VAZ14_GLB = os.path.join(ROOT, "blender", "assets", "vaz14.glb")
-ASFALT_TOP = os.path.join(ROOT, "blender", "assets", "asfalt_top.jpg")  # асфальт сверху (prep_asfalt.py -- top)
 DOROGA_GLB = os.path.join(ROOT, "blender", "assets", "selskaya_doroga.glb")  # плитка грунтовки (prep_doroga.py)
 DEREVYA_GLB = os.path.join(ROOT, "blender", "assets", "derevya.glb")  # tree_bereza, tree_topol, tree_el (prep_trees.py)
-DOM_GLB = os.path.join(ROOT, "blender", "assets", "dom_usadba.glb")
-FAR_HOUSE_GLB = os.path.join(ROOT, "blender", "assets", "dom_odinochny.glb")
+AUL_GLB = {"aul1": os.path.join(ROOT, "blender", "assets", "aul_dom1.glb"),   # усадьба 17,65 × 18,57 м
+           "aul2": os.path.join(ROOT, "blender", "assets", "aul_dom2.glb")}   # усадьба 14,96 × 14,92 м
 ZEMLYA_GLB = os.path.join(ROOT, "blender", "assets", "zemlya_trava.glb")  # плитка газона (prep_zemlya.py)
 TRAVA_TOP = os.path.join(ROOT, "blender", "assets", "trava_top.jpg")      # та же плитка сверху — текстура рельефа
 
@@ -59,11 +58,11 @@ CELLS = 140       # клеток сетки рельефа по стороне
 FLAT = 30         # до этого расстояния от центра земля строго ровная
 ROAD_Y = -10      # ось грунтовой дороги (идёт вдоль X)
 ROAD_TILE = (12.8, 0.02)  # шаг плиток selskaya_doroga (13,04 × 6 м — чуть внахлёст) и высота полотна над землёй
-# Усадьба dom_usadba.glb (дом, сарай, колодец, грядки, забор) 16 × 16,2 м, крыльцом к дороге. Травяная подложка
-# модели толщиной ~0,27 м утоплена в землю. Передний край забора неровный, ближе всего к дороге — y ≈ 0,3
-DOM_POS = (11.0, 8.4)
-DOM_SINK = 0.27
-YARD = (3.0, 0.3, 19.0, 16.5)  # участок усадьбы: x0, y0, x1, y1
+# Аульные усадьбы aul_dom1 / aul_dom2 (дом, сараи, огород, забор на земляной подложке), воротами к дороге;
+# подложка чуть утоплена в землю. Полуразмеры по X и Y модели
+AUL_HALF = {"aul1": (8.83, 9.29), "aul2": (7.48, 7.46)}
+AUL_SINK = 0.1
+YARD = (3.5, 0.3, 18.5, 15.2)  # участок ближней усадьбы (aul2 правее детской площадки): x0, y0, x1, y1
 CAR_POS = (-2.0, ROAD_Y + 3.4)  # фургон на обочине вдоль дороги, у него — точка B
 KTPN_POS = (-13.0, -2.4)  # КТПН у дороги, левее фургона, ~20 м от дома, двери к дороге
 # Фасад и правый край корпуса КТПН: от них стоят сумка с огнетушителем и посторонние. Корпус ktpn_monter.glb
@@ -78,19 +77,18 @@ DUKEN_HALF = (4.5, 3.45)
 # Детская площадка detskaya_ploshadka.glb (8,1 × 9,6 м) правее магазина, до забора усадьбы, входом к дороге
 PLOSHADKA_POS = (-2.0, 10.8)
 PLOSHADKA_HALF = (4.05, 4.8)
-# Асфальт (x0, y0, x1, y1): парковка перед магазином от задней стенки КТПН и съезд к ней с грунтовки левее КТПН,
-# мимо посторонних; на парковке — ВАЗ-2107 мордой к магазину, на обочине левее съезда — Audi и ВАЗ-2114
-PARKING = (-23.0, KTPN_FRONT_Y + KTPN_SIZE[1] + 0.3, -6.5, DUKEN_POS[1] - DUKEN_HALF[1])
-DRIVEWAY = (-22.5, ROAD_Y + 2.4, -18.5, PARKING[1])  # от камней по краю грунтовки
-ASFALT_TOP_SIZE = 5.0  # сторона asfalt_top.jpg, м
-CARS = [(VAZ07_GLB, "wall_vaz07", (-8.4, PARKING[1] + 2.8), -math.pi / 2),  # мордой к магазину
+# ВАЗ-2107 перед магазином мордой к нему, на обочине левее КТПН — Audi и ВАЗ-2114
+CARS = [(VAZ07_GLB, "wall_vaz07", (-8.4, 2.2), -math.pi / 2),  # мордой к магазину
         (AUDI_GLB, "wall_audi", (-29.0, ROAD_Y + 3.3), math.pi),               # мордой по +X вдоль дороги
         (VAZ14_GLB, "wall_vaz14", (-35.0, ROAD_Y + 3.3), math.pi)]
 CAR_HALF = (2.3, 1.1)  # полуразмеры легковой вдоль и поперёк
-# Дальние дома у дороги (dom_odinochny.glb 8 × 7,15 м, высота 5,4 м): x, y, поворот; при rz = 0 крыльцо смотрит
-# на дорогу с севера, при π — с юга, из-за жердевого забора. Под каждым рельеф выровнен в площадку
-FAR_HOUSES = [(-44, -1.5, 0), (42, -1.5, 0), (-31, -21, math.pi), (52, -21, math.pi)]
-FAR_HOUSE_HALF = (4.0, 3.6)  # полуразмеры по X и Y модели
+# Усадьбы у дороги, виды через одну: x, y, поворот, вид; при rz = 0 ворота смотрят на дорогу с севера, при π —
+# с юга, из-за жердевого забора. Первая — ближняя, на участке YARD. Под каждой рельеф выровнен в площадку
+FAR_HOUSES = [((YARD[0] + YARD[2]) / 2, YARD[1] + AUL_HALF["aul2"][1], 0, "aul2"),
+              (-47, ROAD_Y + 4.5 + AUL_HALF["aul1"][1], 0, "aul1"),
+              (42, ROAD_Y + 4.5 + AUL_HALF["aul2"][1], 0, "aul2"),
+              (-31, ROAD_Y - 4.8 - AUL_HALF["aul2"][1], math.pi, "aul2"),
+              (52, ROAD_Y - 4.8 - AUL_HALF["aul1"][1], math.pi, "aul1")]
 PAD_MARGIN, PAD_BLEND = 1.5, 4.0  # ровная кромка вокруг дома и ширина плавного перехода к склону, м
 # Плитки газона zemlya_trava.glb (6 × 6,42 м, поверхность на z = 0): шаг чуть меньше плитки — края неровные, щелей
 # не остаётся. Кладутся только на ровную часть (|x|, |y| ≤ TILE_LIMIT), чуть выше земли, чтобы не мерцали.
@@ -331,16 +329,16 @@ def height_raw(x, y):
 
 def pad_distance(x, y, house):
     """Насколько точка дальше от стен дома (по осям дома), чем ровная кромка площадки; внутри — 0"""
-    hx, hy, rz = house
+    hx, hy, rz, kind = house
     c, s = math.cos(rz), math.sin(rz)
     lx, ly = (x - hx) * c + (y - hy) * s, -(x - hx) * s + (y - hy) * c
-    dx = max(0.0, abs(lx) - FAR_HOUSE_HALF[0] - PAD_MARGIN)
-    dy = max(0.0, abs(ly) - FAR_HOUSE_HALF[1] - PAD_MARGIN)
+    dx = max(0.0, abs(lx) - AUL_HALF[kind][0] - PAD_MARGIN)
+    dy = max(0.0, abs(ly) - AUL_HALF[kind][1] - PAD_MARGIN)
     return math.hypot(dx, dy)
 
 
 # Площадка — на уровне самой низкой точки под домом: в гору дом врезан в выемку, под гору склон не отсыпается
-PAD_LEVELS = [min(height_raw(h[0] + dx, h[1] + dy) for dx in range(-6, 7) for dy in range(-6, 7)
+PAD_LEVELS = [min(height_raw(h[0] + dx, h[1] + dy) for dx in range(-10, 11) for dy in range(-10, 11)
                   if pad_distance(h[0] + dx, h[1] + dy, h) == 0) for h in FAR_HOUSES]
 
 
@@ -379,31 +377,6 @@ def build_ground():
     return o
 
 
-def build_parking():
-    """Парковка у магазина и съезд к ней с грунтовки: плоский асфальт чуть над землёй, текстура asfalt_top.jpg"""
-    m = bpy.data.materials.new("Асфальт парковки")
-    m.use_nodes = True
-    b = principled(m.node_tree)
-    tex = m.node_tree.nodes.new("ShaderNodeTexImage")
-    tex.image = bpy.data.images.load(ASFALT_TOP)
-    m.node_tree.links.new(tex.outputs["Color"], b.inputs["Base Color"])
-    b.inputs["Roughness"].default_value = 0.9
-
-    mb = MB("parking")
-    pts, faces = [], []
-    for x0, y0, x1, y1 in (PARKING, DRIVEWAY):
-        k = len(pts)
-        pts += [(x, y, height(x, y) + 0.03) for x, y in ((x0, y0), (x1, y0), (x1, y1), (x0, y1))]
-        faces.append((k, k + 1, k + 2, k + 3))
-    mb.poly(pts, faces, m)
-    o = mb.build(recalc=False)
-    uv = o.data.uv_layers.new()
-    for loop, l in zip(uv.data, o.data.loops):
-        x, y, _ = pts[l.vertex_index]
-        loop.uv = (x / ASFALT_TOP_SIZE, y / ASFALT_TOP_SIZE)
-    return o
-
-
 def build_road():
     """Грунтовка вдоль X — плитки selskaya_doroga.glb подряд (меш и текстуры общие), через одну развёрнуты на 180°,
     чтобы рисунок не повторялся; полотно чуть над землёй (рельеф под дорогой ровный)"""
@@ -430,25 +403,22 @@ def build_road():
 # ---------- Газон: плитки zemlya_trava ----------
 
 def tile_blocked(x, y):
-    """Плитка с центром (x, y) задевает дорогу или место, где кочки по колено пробили бы модель или спрятали
-    объект задания: усадьба (у неё своя трава), фургон, КТПН с посторонними и сумкой с огнетушителем"""
+    """Плитка с центром (x, y) не кладётся, если задевает грунтовку или если её центр — под усадьбой (у неё своя
+    трава), магазином, детской площадкой или машиной. Вокруг КТПН газон есть"""
     hx, hy = TILE_HALF
+    if y - hy < ROAD_Y + 3.0 and y + hy > ROAD_Y - 3.0:  # грунтовка с камнями по краям
+        return True
     zones = [
-        (-SIZE, ROAD_Y - 3.0, SIZE, ROAD_Y + 3.0),  # грунтовка с обочинами
         YARD,
         (CAR_POS[0] - 2.9, CAR_POS[1] - 1.25, CAR_POS[0] + 2.9, CAR_POS[1] + 1.25),
-        (KTPN_RIGHT_X - KTPN_SIZE[0] - 2.6, KTPN_FRONT_Y - 2.6, KTPN_RIGHT_X + 2.3, KTPN_FRONT_Y + KTPN_SIZE[1] + 0.3),
-        (DUKEN_POS[0] - DUKEN_HALF[0] - 0.5, DUKEN_POS[1] - DUKEN_HALF[1] - 0.8,
-         DUKEN_POS[0] + DUKEN_HALF[0] + 0.5, DUKEN_POS[1] + DUKEN_HALF[1] + 0.5),
+        (DUKEN_POS[0] - DUKEN_HALF[0], DUKEN_POS[1] - DUKEN_HALF[1], DUKEN_POS[0] + DUKEN_HALF[0], DUKEN_POS[1] + DUKEN_HALF[1]),
         (PLOSHADKA_POS[0] - PLOSHADKA_HALF[0], PLOSHADKA_POS[1] - PLOSHADKA_HALF[1],
          PLOSHADKA_POS[0] + PLOSHADKA_HALF[0], PLOSHADKA_POS[1] + PLOSHADKA_HALF[1]),
-        PARKING,
-        DRIVEWAY,
     ]
     for _, _, (cx, cy), rz in CARS:
         ax, ay = CAR_HALF if abs(math.cos(rz)) > 0.5 else CAR_HALF[::-1]
         zones.append((cx - ax, cy - ay, cx + ax, cy + ay))
-    return any(x - hx < x1 and x + hx > x0 and y - hy < y1 and y + hy > y0 for x0, y0, x1, y1 in zones)
+    return any(x0 < x < x1 and y0 < y < y1 for x0, y0, x1, y1 in zones)
 
 
 def build_grass_tiles():
@@ -594,19 +564,22 @@ def build_trees():
 # ---------- Дальние дома у дороги ----------
 
 def build_far_houses():
-    """Одна модель дома на все места: копии делят меш и текстуры, поэтому сцена не растёт в размере"""
-    first = None
-    for i, (x, y, rz) in enumerate(FAR_HOUSES):
-        name = f"house_far_{i}"
-        if first is None:
-            first = place_model(FAR_HOUSE_GLB, name, (x, y), rz, base_z=PAD_LEVELS[i], solid=False, fit_logos=False)
+    """Усадьбы FAR_HOUSES: одна модель на вид, копии делят меш и текстуры, поэтому сцена не растёт в размере"""
+    first = {}
+    for i, (x, y, rz, kind) in enumerate(FAR_HOUSES):
+        name, z = f"wall_dom_{kind}_{i}", PAD_LEVELS[i] - AUL_SINK
+        if kind not in first:
+            meshes = place_model(AUL_GLB[kind], name, (x, y), rz, base_z=z, fit_logos=False)
+            root0 = meshes[0].parent
+            first[kind] = (meshes, root0, root0.location.z - z)
             continue
-        root = first[0].parent.copy()
+        meshes, root0, dz = first[kind]
+        root = root0.copy()
         root.name = name
-        root.location = (x, y, root.location.z - PAD_LEVELS[0] + PAD_LEVELS[i])
+        root.location = (x, y, z + dz)
         root.rotation_euler.z = rz
         bpy.context.collection.objects.link(root)
-        for o in first:
+        for o in meshes:
             c = o.copy()  # данные меша общие
             c.parent = root
             bpy.context.collection.objects.link(c)
@@ -772,7 +745,6 @@ def build():
 
     build_ground()
     build_road()
-    build_parking()
     build_grass_tiles()
     build_fences()
     build_trees()
@@ -788,7 +760,6 @@ def build():
     empty("place_ats", (-8.0, 7.0, 0))
     # Объекты задания «Улица у КТПН» (public/walk-tasks.json) называются item_<id карточки>
     place_model(VAN_GLB, "item_van-ok", CAR_POS, math.pi)  # мордой по +X вдоль дороги
-    place_model(DOM_GLB, "wall_dom_usadba", DOM_POS, 0, base_z=-DOM_SINK, fit_logos=False)  # крыльцом к дороге
     # КТПН дверями к дороге, вокруг нет ограждения. Монтёр — часть той же модели, поэтому один объект на четыре
     # карточки: не ограждена зона, без каски и в одиночку (нарушения), в диэлектрических ботах (правильно)
     place_model(KTPN_GLB, "item_zone-unfenced+no-helmet+alone+boots-ok", (KTPN_RIGHT_X, KTPN_FRONT_Y), 0,
