@@ -1,6 +1,6 @@
 """
 Локация 6 «Окраина деревни»: сельская улица днём. Вдоль дороги (плитки asfalt.glb, как на трассе) по одной
-стороне — дома из сцены 1 (усадьбы dom_usadba и одиночные дома dom_odinochny); там, где дома кончаются, —
+стороне — аульные усадьбы aul_dom1 и aul_dom2 по очереди; там, где дома кончаются, —
 окраина: поле с газоном (zemlya_trava), лесополоса (derevya, kusty) и огороженная площадка с высокой вышкой
 сотовой связи (sotovaya_vyshka.glb, 36 м). У ворот площадки — фургон Казахтелекома из локации 1.
 
@@ -30,22 +30,35 @@ from lowpoly import M, MB, empty, mat  # noqa: E402
 ROOT = city.ROOT
 OUT_GLB = os.path.join(ROOT, "public", "models", "village.glb")
 OUT_BLEND = os.path.join(ROOT, "blender", "village_base.blend")
-USADBA_GLB = os.path.join(ROOT, "blender", "assets", "dom_usadba.glb")       # усадьба 16 × 16,2 м (сцена 1)
-ODIN_GLB = os.path.join(ROOT, "blender", "assets", "dom_odinochny.glb")      # одиночный дом 8 × 7,2 м (сцена 1)
+AUL_GLB = {"aul1": os.path.join(ROOT, "blender", "assets", "aul_dom1.glb"),   # усадьба 17,65 × 18,57 м
+           "aul2": os.path.join(ROOT, "blender", "assets", "aul_dom2.glb")}   # усадьба 14,96 × 14,92 м
 VYSHKA_GLB = os.path.join(ROOT, "blender", "assets", "sotovaya_vyshka.glb")  # вышка 36 м, основание 5,7 × 6,1 м
 NIVA_GLB = os.path.join(ROOT, "blender", "assets", "niva.glb")               # «Нива» 3,74 м
 
 X0, X1 = -160, 160           # дорога по X
 SHOULDER = hw.SHOULDER       # край гравийной обочины, 5,4 м от оси
 YARD_Y = 7.5                 # от оси дороги до фасадной границы участков на +Y
-# Дома по +Y: (вид, x центра); усадьбы и одиночные дома вперемешку, крыльцом к дороге. Дальше X_LAST — окраина
-HOUSES = [("usadba", -128), ("odin", -110), ("usadba", -92), ("odin", -74), ("odin", -63), ("usadba", -45),
-          ("odin", -27), ("usadba", -9), ("odin", 9)]
-HOUSE_DEPTH = {"usadba": 16.2, "odin": 7.2}
-HOUSE_SINK = {"usadba": 0.1, "odin": 0.0}  # подложку усадьбы чуть утапливаем в газон
-# Дома за дорогой на −Y (только в деревне, до поля): крыльцом к дороге
-HOUSES_FAR = [("odin", -120), ("usadba", -100), ("odin", -80), ("usadba", -60)]
+HOUSE_SIZE = {"aul1": (17.65, 18.57), "aul2": (14.96, 14.92)}  # ширина по X, глубина по Y
+HOUSE_SINK = 0.1             # земляную подложку усадеб чуть утапливаем в газон
+HOUSE_GAP = 2.0              # между заборами соседних усадеб
 X_LAST = 20                  # дальше по +Y — тоже поле
+
+
+def house_row(x0, x1, kinds):
+    """Усадьбы вплотную (через HOUSE_GAP) от x0 до x1, виды чередуются по kinds: [(вид, x центра)]"""
+    row, x, i = [], x0, 0
+    while True:
+        kind = kinds[i % len(kinds)]
+        w = HOUSE_SIZE[kind][0]
+        if x + w > x1:
+            return row
+        row.append((kind, x + w / 2))
+        x, i = x + w + HOUSE_GAP, i + 1
+
+
+# Усадьбы aul_dom1 и aul_dom2 по очереди, воротами к дороге: по +Y — до окраины, по −Y — только в деревне, до поля
+HOUSES = house_row(-140, X_LAST - 2, ("aul1", "aul2"))
+HOUSES_FAR = house_row(-140, -52, ("aul2", "aul1"))
 
 # Площадка вышки на −Y, за полем у обочины; ограда сеткой с воротами к дороге, внутри гравий
 VYSHKA_POS = (42.0, -21.0)
@@ -133,9 +146,9 @@ def place_copies(path, rows, prefix):
 
 
 def build_houses():
-    for kind, path in (("usadba", USADBA_GLB), ("odin", ODIN_GLB)):
-        d, z = HOUSE_DEPTH[kind], -HOUSE_SINK[kind]
-        rows = [(x, YARD_Y + d / 2, 0, z) for k, x in HOUSES if k == kind]           # крыльцо (−Y модели) к дороге
+    for kind, path in AUL_GLB.items():
+        d, z = HOUSE_SIZE[kind][1], -HOUSE_SINK
+        rows = [(x, YARD_Y + d / 2, 0, z) for k, x in HOUSES if k == kind]           # ворота (−Y модели) к дороге
         rows += [(x, -YARD_Y - d / 2, math.pi, z) for k, x in HOUSES_FAR if k == kind]
         place_copies(path, rows, f"wall_dom_{kind}")
 
