@@ -83,7 +83,7 @@ CARS = [(VAZ07_GLB, "wall_vaz07", (-8.4, 2.2), -math.pi / 2),  # мордой к
         (VAZ14_GLB, "wall_vaz14", (-35.0, ROAD_Y + 3.3), math.pi)]
 CAR_HALF = (2.3, 1.1)  # полуразмеры легковой вдоль и поперёк
 # Усадьбы у дороги, виды через одну: x, y, поворот, вид; при rz = 0 ворота смотрят на дорогу с севера, при π —
-# с юга, из-за жердевого забора. Первая — ближняя, на участке YARD. Под каждой рельеф выровнен в площадку
+# с юга, из-за линии. Первая — ближняя, на участке YARD. Под каждой рельеф выровнен в площадку
 FAR_HOUSES = [((YARD[0] + YARD[2]) / 2, YARD[1] + AUL_HALF["aul2"][1], 0, "aul2"),
               (-47, ROAD_Y + 4.5 + AUL_HALF["aul1"][1], 0, "aul1"),
               (42, ROAD_Y + 4.5 + AUL_HALF["aul2"][1], 0, "aul2"),
@@ -477,34 +477,10 @@ def board_fence(name, a, b):
     return mb.build()
 
 
-def rail_fence(name, a, b):
-    """Жердевой забор у дороги: столбы по рельефу и две жерди с провисом"""
-    mb = MB(name)
-    a, b = V((*a, 0)), V((*b, 0))
-    length = (b - a).length
-    t = (b - a).normalized()
-    steps = max(1, round(length / 3))
-    tops = []
-    for k in range(steps + 1):
-        p = a + t * (length * k / steps)
-        p.z = height(p.x, p.y)
-        lean = V((random.uniform(-0.06, 0.06), random.uniform(-0.06, 0.06), 0))
-        mb.cyl(p - V((0, 0, 0.3)), p + V((0, 0, 1.25)) + lean, 0.07, 0.06, M["wood_old"], n=6)
-        tops.append(p + lean * 0.5)
-    for z in (0.55, 1.05):
-        for p, q in zip(tops, tops[1:]):
-            mid = (p + q) / 2 + V((0, 0, z - random.uniform(0.02, 0.07)))
-            mb.cyl(p + V((0, 0, z)), mid, 0.045, 0.045, M["wood_old"], n=5)
-            mb.cyl(mid, q + V((0, 0, z)), 0.045, 0.045, M["wood_old"], n=5)
-    return mb.build()
-
-
 def build_fences():
-    # Глухой забор соседнего участка и жерди вдоль дороги
+    # Глухой забор соседнего участка
     board_fence("wall_fence_neighbor_1", (-24, 18), (-12, 18))
     board_fence("wall_fence_neighbor_2", (-12, 18), (0, 18))
-    for i, x in enumerate(range(-60, 60, 12)):
-        rail_fence(f"{'wall_' if -24 <= x < 24 else ''}fence_rail_{i}", (x, ROAD_Y - 3.8), (x + 12, ROAD_Y - 3.8))
 
 
 # ---------- Деревья ----------
@@ -587,7 +563,7 @@ def build_far_houses():
 
 # ---------- ВЛ 10 кВ вдоль дороги ----------
 
-LINE_Y = ROAD_Y - 3.0  # опоры по другую сторону дороги от КТПН, между обочиной и жердевым забором
+LINE_Y = ROAD_Y - 3.0  # опоры по другую сторону дороги от КТПН, у обочины
 POLE_XS = [KTPN_POS[0] + 25 * k for k in range(-2, 4)]  # пролёт 25 м, одна опора — напротив КТПН
 POLE_H = 9.0  # высота опоры над землёй
 
