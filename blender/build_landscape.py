@@ -38,6 +38,7 @@ VAN_GLB = os.path.join(ROOT, "blender", "assets", "furgonkt_van.glb")
 KTPN_GLB = os.path.join(ROOT, "blender", "assets", "ktpn_monter.glb")
 SUMKA_GLB = os.path.join(ROOT, "blender", "assets", "sumka_ognetushitel.glb")
 MUZHIK_GLB = os.path.join(ROOT, "blender", "assets", "muzhik_pes_pacan.glb")
+DUKEN_GLB = os.path.join(ROOT, "blender", "assets", "duken.glb")
 DOM_GLB = os.path.join(ROOT, "blender", "assets", "dom_usadba.glb")
 FAR_HOUSE_GLB = os.path.join(ROOT, "blender", "assets", "dom_odinochny.glb")
 ZEMLYA_GLB = os.path.join(ROOT, "blender", "assets", "zemlya_trava.glb")  # плитка газона (prep_zemlya.py)
@@ -63,6 +64,9 @@ KTPN_POS = (-13.0, -2.4)  # КТПН у дороги, левее фургона,
 KTPN_FRONT_Y = KTPN_POS[1] - 2.2
 KTPN_RIGHT_X = KTPN_POS[0] + 2.17
 KTPN_SIZE = (3.44, 2.69)
+# Магазин duken.glb (9 × 6,9 м) за КТПН, вывеской и дверью к дороге; фасад в ~3,4 м за задней стенкой КТПН
+DUKEN_POS = (-11.5, 4.95)
+DUKEN_HALF = (4.5, 3.45)
 # Дальние дома у дороги (dom_odinochny.glb 8 × 7,15 м, высота 5,4 м): x, y, поворот; при rz = 0 крыльцо смотрит
 # на дорогу с севера, при π — с юга, из-за жердевого забора. Под каждым рельеф выровнен в площадку
 FAR_HOUSES = [(-44, -1.5, 0), (42, -1.5, 0), (-31, -21, math.pi), (52, -21, math.pi)]
@@ -389,6 +393,8 @@ def tile_blocked(x, y):
         YARD,
         (CAR_POS[0] - 2.9, CAR_POS[1] - 1.25, CAR_POS[0] + 2.9, CAR_POS[1] + 1.25),
         (KTPN_RIGHT_X - KTPN_SIZE[0] - 2.6, KTPN_FRONT_Y - 2.6, KTPN_RIGHT_X + 2.3, KTPN_FRONT_Y + KTPN_SIZE[1] + 0.3),
+        (DUKEN_POS[0] - DUKEN_HALF[0] - 0.5, DUKEN_POS[1] - DUKEN_HALF[1] - 0.8,
+         DUKEN_POS[0] + DUKEN_HALF[0] + 0.5, DUKEN_POS[1] + DUKEN_HALF[1] + 0.5),
     ]
     return any(x - hx < x1 and x + hx > x0 and y - hy < y1 and y + hy > y0 for x0, y0, x1, y1 in zones)
 
@@ -749,6 +755,7 @@ def build():
     place_model(KTPN_GLB, "item_zone-unfenced+no-helmet+alone+boots-ok", (KTPN_RIGHT_X, KTPN_FRONT_Y), 0,
                 inspect=3.5)  # монтёр в проёме — осматривается от створок
     empty("place_worker", (-1.0, -4.0, 0))
+    place_model(DUKEN_GLB, "wall_duken", DUKEN_POS, 0, fit_logos=False)  # магазин за КТПН, вывеской к дороге
 
     bpy.ops.wm.save_as_mainfile(filepath=OUT_BLEND)
     bpy.ops.export_scene.gltf(filepath=OUT_GLB, export_format="GLB", export_extras=True, export_apply=True)
